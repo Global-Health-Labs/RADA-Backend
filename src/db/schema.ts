@@ -66,6 +66,15 @@ export const documents = pgTable('document', {
   updatedAt: timestamp('updated_at').defaultNow(),
 });
 
+export const liquidTypes = pgTable('liquid_type', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  displayName: varchar('display_name', { length: 100 }).notNull(),
+  value: varchar('value', { length: 100 }).notNull().unique(),
+  createdAt: timestamp('created_at').defaultNow(),
+  updatedAt: timestamp('updated_at').defaultNow(),
+  lastUpdatedBy: uuid('last_updated_by').references(() => users.id).notNull(),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ one }) => ({
   role: one(roles, {

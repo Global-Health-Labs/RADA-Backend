@@ -1,0 +1,167 @@
+import { eq } from "drizzle-orm";
+import { Router } from "express";
+import { z } from "zod";
+import { db } from "../db";
+import { liquidTypes } from "../db/schema";
+import { authenticateToken } from "../middleware/auth";
+
+const router = Router();
+
+const liquidTypeSchema = z.object({
+  value: z.string().min(1),
+  displayName: z.string().min(1),
+});
+
+// GET /settings/liquid-types
+router.get("/liquid-types", authenticateToken, async (req, res) => {
+  const types = await db
+    .select()
+    .from(liquidTypes)
+    .orderBy(liquidTypes.displayName);
+  res.json(types);
+});
+
+// POST /settings/liquid-types
+router.post("/liquid-types", authenticateToken, async (req, res) => {
+  try {
+    const { value, displayName } = liquidTypeSchema.parse(req.body);
+
+    // Check if value already exists
+    const existing = await db
+      .select()
+      .from(liquidTypes)
+      .where(eq(liquidTypes.value, value))
+      .limit(1);
+
+    if (existing.length > 0) {
+      return res
+        .status(400)
+        .json({ message: "Liquid type with this value already exists" });
+    }
+
+    const [newType] = await db
+      .insert(liquidTypes)
+      .values({
+        value,
+        displayName,
+        lastUpdatedBy: req.user!.id,
+      })
+      .returning();
+
+    res.status(201).json(newType);
+  } catch (error: any) {
+    console.error("Error creating liquid type:", error);
+    
+    // Check for validation errors from Zod
+    if (error.name === 'ZodError') {
+      return res.status(400).json({ 
+        message: "Invalid input data", 
+        error: error.errors 
+      });
+    }
+
+    // Check if error message indicates a unique constraint violation
+    if (error.message?.toLowerCase().includes('unique') || 
+        error.message?.toLowerCase().includes('duplicate') ||
+        error.message?.toLowerCase().includes('violation')) {
+      return res.status(409).json({ 
+        message: "A liquid type with this value already exists",
+        error: error.message 
+      });
+    }
+
+    res.status(500).json({ 
+      message: "Failed to create liquid type", 
+      error: error.message 
+    });
+  }
+});
+
+// PUT /settings/liquid-types/:id
+router.put("/liquid-types/:id", authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { value, displayName } = liquidTypeSchema.parse(req.body);
+
+    // Check if value already exists for a different ID
+    const existing = await db
+      .select()
+      .from(liquidTypes)
+      .where(eq(liquidTypes.value, value))
+      .limit(1);
+
+    if (existing.length > 0 && existing[0].id !== id) {
+      return res
+        .status(400)
+        .json({ message: "Liquid type with this value already exists" });
+    }
+
+    const [updatedType] = await db
+      .update(liquidTypes)
+      .set({
+        value,
+        displayName,
+        lastUpdatedBy: req.user!.id,
+      })
+      .where(eq(liquidTypes.id, id))
+      .returning();
+
+    if (!updatedType) {
+      return res.status(404).json({ message: "Liquid type not found" });
+    }
+
+    res.json(updatedType);
+  } catch (error: any) {
+    console.error("Error updating liquid type:", error);
+    
+    // Check for validation errors from Zod
+    if (error.name === 'ZodError') {
+      return res.status(400).json({ 
+        message: "Invalid input data", 
+        error: error.errors 
+      });
+    }
+
+    // Check if error message indicates a unique constraint violation
+    if (error.message?.toLowerCase().includes('unique') || 
+        error.message?.toLowerCase().includes('duplicate') ||
+        error.message?.toLowerCase().includes('violation')) {
+      return res.status(409).json({ 
+        message: "A liquid type with this value already exists",
+        error: error.message 
+      });
+    }
+
+    // Check for invalid ID format
+    if (error.message?.toLowerCase().includes('invalid') && 
+        error.message?.toLowerCase().includes('id')) {
+      return res.status(400).json({ 
+        message: "Invalid liquid type ID format",
+        error: error.message 
+      });
+    }
+
+    res.status(500).json({ 
+      message: "Failed to update liquid type", 
+      error: error.message 
+    });
+  }
+});
+
+// DELETE /settings/liquid-types/:id
+router.delete("/liquid-types/:id", authenticateToken, async (req, res) => {
+  const { id } = req.params;
+
+  const [deletedType] = await db
+    .delete(liquidTypes)
+    .where(eq(liquidTypes.id, id))
+    .returning();
+
+  if (!deletedType) {
+    return res.status(404).json({ message: "Liquid type not found" });
+  }
+
+  res.json(deletedType);
+});
+
+export default router;

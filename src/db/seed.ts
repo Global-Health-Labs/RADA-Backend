@@ -4,6 +4,7 @@ import { hashPassword } from "../utils/auth";
 import { v4 as uuidv4 } from "uuid";
 import { faker } from "@faker-js/faker";
 import { eq } from "drizzle-orm";
+import { seedLiquidTypes } from "./seeds/liquid-types";
 
 async function seed() {
   try {
@@ -104,11 +105,15 @@ async function seed() {
       console.log("Experimental Plans already exist");
     }
 
+    // Seed liquid types
+    await seedLiquidTypes();
+
     console.log("\nYou can now login with:");
     console.log("Email: admin@example.com");
     console.log("Password: Admin@123");
+    console.log("Database seeded!");
   } catch (error) {
-    console.error("Seeding failed:", error);
+    console.error("Error seeding database:", error);
     process.exit(1);
   }
 

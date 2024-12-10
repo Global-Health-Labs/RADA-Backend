@@ -1,5 +1,7 @@
 import { Router, Request, Response } from 'express';
+import { eq } from 'drizzle-orm';
 import { db } from '../db';
+import { users, roles } from '../db/schema';
 import { authenticateToken } from '../middleware/auth';
 
 const router = Router();
@@ -7,18 +9,18 @@ const router = Router();
 // Get users with roles
 router.get('/roles', authenticateToken, async (req: Request, res: Response) => {
     try {
-        const users = await db.query(
-            `SELECT 
-                u.id as user_id,
-                u.fullname,
-                u.email,
-                r.name as role,
-                u.role_updated_at
-            FROM users u
-            JOIN roles r ON u.role_id = r.id`
-        );
+        const usersWithRoles = await db
+            .select({
+                user_id: users.id,
+                fullname: users.fullname,
+                email: users.email,
+                role: roles.name,
+                role_updated_at: users.roleUpdatedAt
+            })
+            .from(users)
+            .leftJoin(roles, eq(users.roleId, roles.id));
 
-        res.json(users.rows);
+        res.json(usersWithRoles);
     } catch (error) {
         console.error('Get users with roles error:', error);
         res.status(500).json({ message: 'Failed to fetch users', error: error.message });
@@ -32,27 +34,30 @@ router.patch('/:userId/role', authenticateToken, async (req: Request, res: Respo
         const { newRole } = req.body;
 
         // Get user and current role
-        const user = await db.query(
-            `SELECT u.*, r.name as role_name 
-            FROM users u 
-            JOIN roles r ON u.role_id = r.id 
-            WHERE u.id = $1`,
-            [userId]
-        );
+        const [userWithRole] = await db
+            .select({
+                user: users,
+                role_name: roles.name
+            })
+            .from(users)
+            .leftJoin(roles, eq(users.roleId, roles.id))
+            .where(eq(users.id, userId))
+            .limit(1);
 
-        if (user.rows.length === 0) {
+        if (!userWithRole) {
             return res.status(404).json({ message: 'User not found' });
         }
 
-        const currentRole = user.rows[0].role_name;
+        const currentRole = userWithRole.role_name;
 
         // Get new role ID
-        const role = await db.query(
-            'SELECT id FROM roles WHERE name = $1',
-            [newRole]
-        );
+        const [role] = await db
+            .select()
+            .from(roles)
+            .where(eq(roles.name, newRole))
+            .limit(1);
 
-        if (role.rows.length === 0) {
+        if (!role) {
             return res.status(400).json({ message: 'Invalid role' });
         }
 
@@ -62,17 +67,18 @@ router.patch('/:userId/role', authenticateToken, async (req: Request, res: Respo
         }
 
         // Update user's role
-        const updatedUser = await db.query(
-            `UPDATE users 
-            SET role_id = $1, role_updated_at = CURRENT_TIMESTAMP 
-            WHERE id = $2
-            RETURNING *`,
-            [role.rows[0].id, userId]
-        );
+        const [updatedUser] = await db
+            .update(users)
+            .set({
+                roleId: role.id,
+                roleUpdatedAt: new Date()
+            })
+            .where(eq(users.id, userId))
+            .returning();
 
         res.json({
             message: 'Role updated successfully',
-            user: updatedUser.rows[0]
+            user: updatedUser
         });
     } catch (error) {
         console.error('Update user role error:', error);

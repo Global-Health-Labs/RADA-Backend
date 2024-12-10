@@ -2,13 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import config from './config';
 import { db } from './db';
-
-// Import route handlers
-import authRouter from './routes/auth.routes';
-import experimentsRouter from './routes/experiments.routes';
-import mastermixesRouter from './routes/mastermixes.routes';
-import documentsRouter from './routes/documents.routes';
-import usersRouter from './routes/users.routes';
+import router from './routes';
 
 const app = express();
 
@@ -33,12 +27,8 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
-// Routes
-app.use('/auth', authRouter);
-app.use('/experiments', experimentsRouter);
-app.use('/mastermixes', mastermixesRouter);
-app.use('/documents', documentsRouter);
-app.use('/users', usersRouter);
+// Use centralized routes
+app.use('/', router);
 
 console.log('Port: ', config.PORT, 'NODE_ENV: ', config.NODE_ENV);
 

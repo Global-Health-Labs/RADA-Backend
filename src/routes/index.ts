@@ -4,6 +4,7 @@ import documentsRoutes from './documents.routes';
 import experimentsRoutes from './experiments.routes';
 import mastermixesRoutes from './mastermixes.routes';
 import usersRoutes from './users.routes';
+import settingsRoutes from './settings.routes';
 
 const router = Router();
 
@@ -12,5 +13,6 @@ router.use('/documents', documentsRoutes);
 router.use('/experiments', experimentsRoutes);
 router.use('/mastermixes', mastermixesRoutes);
 router.use('/users', usersRoutes);
+router.use('/settings', settingsRoutes);
 
 export default router;

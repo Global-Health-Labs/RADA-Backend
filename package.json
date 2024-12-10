@@ -10,7 +10,8 @@
     "generate": "drizzle-kit generate:pg",
     "migrate": "ts-node src/db/migrate.ts",
     "seed": "ts-node src/db/seed.ts",
-    "studio": "drizzle-kit studio"
+    "studio": "drizzle-kit studio",
+    "db:push": "npm run generate && npm run migrate"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.705.0",
