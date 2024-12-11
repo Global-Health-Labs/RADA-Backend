@@ -6,6 +6,8 @@ import { db } from "../db";
 import { roles, users } from "../db/schema";
 import { authenticateToken } from "../middleware/auth";
 import { comparePassword, hashPassword } from "../utils/auth";
+import { sendResetPasswordEmail } from "../services/email.service";
+import { v4 as uuidv4 } from "uuid";
 
 const router = Router();
 
@@ -13,6 +15,8 @@ const router = Router();
 router.post("/login", async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
+
+    console.log(email, password);
 
     // Find user
     const [userWithRole] = await db
@@ -22,38 +26,50 @@ router.post("/login", async (req: Request, res: Response) => {
       .where(eq(users.email, email))
       .limit(1);
 
-    if (!userWithRole || !userWithRole.role) {
+    const { user, role } = userWithRole;
+
+    if (!user || !role) {
       return res.status(401).json({ message: "Invalid email or password" });
     }
 
     // Check password
-    const validPassword = await comparePassword(
-      password,
-      userWithRole.user.password!
-    );
+    const validPassword = await comparePassword(password, user.password!);
     if (!validPassword) {
       return res.status(401).json({ message: "Invalid email or password" });
     }
 
-    // Generate token
-    const token = jwt.sign(
-      {
-        id: userWithRole.user.id,
-        username: userWithRole.user.fullname,
-        role: userWithRole.role.name,
-      },
-      config.JWT_SECRET_KEY,
-      { expiresIn: config.JWT_ACCESS_TOKEN_EXPIRES }
-    );
+    // Generate appropriate token based on confirmation status
+    let token;
+    if (!user.confirmed) {
+      token = jwt.sign(
+        {
+          id: user.id,
+          email: user.email,
+          type: "password_reset",
+        },
+        config.JWT_SECRET_KEY,
+        { expiresIn: "1h" }
+      );
+    } else {
+      token = jwt.sign(
+        {
+          id: user.id,
+          username: user.fullname,
+          role: role.name,
+        },
+        config.JWT_SECRET_KEY,
+        { expiresIn: config.JWT_ACCESS_TOKEN_EXPIRES }
+      );
+    }
 
     res.json({
       access_token: token,
       user: {
-        id: userWithRole.user.id,
-        fullname: userWithRole.user.fullname,
-        email: userWithRole.user.email,
-        role: userWithRole.role.name,
-        confirmed: userWithRole.user.confirmed,
+        id: user.id,
+        fullname: user.fullname,
+        email: user.email,
+        role: role.name,
+        confirmed: user.confirmed,
       },
     });
   } catch (error: any) {
@@ -83,61 +99,118 @@ router.get(
   }
 );
 
-// Register endpoint
-router.post("/register", async (req: Request, res: Response) => {
+// Forgot password endpoint
+router.post("/forgot-password", async (req: Request, res: Response) => {
   try {
-    const { fullname, email, password } = req.body;
+    const { email } = req.body;
 
-    // Check if user exists
-    const [existingUser] = await db
+    // Find user
+    const [user] = await db
       .select()
       .from(users)
       .where(eq(users.email, email))
       .limit(1);
 
-    if (existingUser) {
-      return res.status(400).json({ message: "User already exists" });
+    if (!user) {
+      // For security reasons, don't reveal if the email exists
+      return res.json({
+        message: "If the email exists, reset instructions will be sent.",
+      });
     }
 
-    // Get default role (user)
-    const [userRole] = await db
+    // Generate reset token valid for 1 hour
+    const resetToken = jwt.sign(
+      {
+        id: user.id,
+        email: user.email,
+        type: "password_reset",
+      },
+      config.JWT_SECRET_KEY,
+      { expiresIn: "1h" }
+    );
+
+    // Send reset email
+    const resetLink = `${config.FRONTEND_URL}/reset-password?token=${resetToken}`;
+    await sendResetPasswordEmail(email, resetLink);
+
+    res.json({
+      message: "If the email exists, reset instructions will be sent.",
+    });
+  } catch (error: any) {
+    console.error("Forgot password error:", error);
+    res.status(500).json({
+      message: "Failed to process request",
+      error: error.message,
+    });
+  }
+});
+
+// Reset password endpoint
+router.post("/reset-password", async (req: Request, res: Response) => {
+  try {
+    const { token, password } = req.body;
+
+    if (!token || !password) {
+      return res.status(400).json({
+        message: "Token and password are required",
+      });
+    }
+
+    // Verify and decode the reset token
+    let decoded;
+    try {
+      decoded = jwt.verify(token, config.JWT_SECRET_KEY) as {
+        id: string;
+        email: string;
+        type: string;
+      };
+    } catch (err) {
+      if (err instanceof jwt.TokenExpiredError) {
+        return res.status(400).json({ message: "Reset token has expired" });
+      }
+      return res.status(400).json({ message: "Invalid reset token" });
+    }
+
+    // Verify this is a password reset token
+    if (decoded.type !== "password_reset") {
+      return res.status(400).json({ message: "Invalid token type" });
+    }
+
+    // Find user
+    const [user] = await db
       .select()
-      .from(roles)
-      .where(eq(roles.name, "user"))
+      .from(users)
+      .where(eq(users.id, decoded.id))
       .limit(1);
 
-    if (!userRole) {
-      return res.status(500).json({ message: "Default role not found" });
+    if (!user) {
+      return res.status(400).json({ message: "User not found" });
     }
 
-    // Hash password
+    // Verify email matches
+    if (user.email !== decoded.email) {
+      return res.status(400).json({ message: "Invalid token" });
+    }
+
+    // Hash new password
     const hashedPassword = await hashPassword(password);
 
-    // Create user
-    const [newUser] = await db
-      .insert(users)
-      .values({
-        fullname,
-        email,
+    // Update user password
+    await db
+      .update(users)
+      .set({
         password: hashedPassword,
-        roleId: userRole.id,
-        confirmed: false,
+        confirmed: true,
       })
-      .returning();
+      .where(eq(users.id, user.id));
 
-    res.status(201).json({
-      message: "User registered successfully",
-      user: {
-        id: newUser.id,
-        fullname: newUser.fullname,
-        email: newUser.email,
-      },
+    res.json({ message: "Password successfully reset" });
+  } catch (error: any) {
+    console.error("Reset password error:", error);
+    res.status(500).json({
+      message: "Failed to reset password",
+      error: error.message,
     });
-  } catch (error) {
-    console.error("Registration error:", error);
-    res
-      .status(500)
-      .json({ message: "Registration failed", error: error.message });
   }
 });
 

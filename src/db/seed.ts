@@ -5,6 +5,7 @@ import { v4 as uuidv4 } from "uuid";
 import { faker } from "@faker-js/faker";
 import { eq } from "drizzle-orm";
 import { seedLiquidTypes } from "./seeds/liquid-types";
+import { seedVolumeUnits } from "./seeds/volume-units";
 
 async function seed() {
   try {
@@ -71,7 +72,7 @@ async function seed() {
     // Check if experimental plans already exist
     const existingExperimentalPlans = await db.select().from(experimentalPlans);
 
-    if (existingExperimentalPlans.length < 100) {
+    if (existingExperimentalPlans.length === 0) {
       const adminUser = await db
         .select()
         .from(users)
@@ -108,16 +109,18 @@ async function seed() {
     // Seed liquid types
     await seedLiquidTypes();
 
+    // Seed volume units
+    await seedVolumeUnits();
+
     console.log("\nYou can now login with:");
     console.log("Email: admin@example.com");
     console.log("Password: Admin@123");
-    console.log("Database seeded!");
+    console.log("Database seeded successfully");
   } catch (error) {
     console.error("Error seeding database:", error);
-    process.exit(1);
+  } finally {
+    process.exit(0);
   }
-
-  process.exit(0);
 }
 
 seed();

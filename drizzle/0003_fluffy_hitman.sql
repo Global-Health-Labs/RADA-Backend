@@ -1,0 +1,1 @@
+ALTER TABLE "liquid_type" ADD COLUMN "needs_tip_washing" boolean DEFAULT true NOT NULL;

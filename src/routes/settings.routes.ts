@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { Router } from "express";
 import { z } from "zod";
 import { db } from "../db";
-import { liquidTypes } from "../db/schema";
+import { liquidTypes, volumeUnits } from "../db/schema";
 import { authenticateToken } from "../middleware/auth";
 
 const router = Router();
@@ -10,6 +10,10 @@ const router = Router();
 const liquidTypeSchema = z.object({
   value: z.string().min(1),
   displayName: z.string().min(1),
+});
+
+const volumeUnitSchema = z.object({
+  unit: z.string().min(1),
 });
 
 // GET /settings/liquid-types
@@ -162,6 +166,113 @@ router.delete("/liquid-types/:id", authenticateToken, async (req, res) => {
   }
 
   res.json(deletedType);
+});
+
+// Volume Units Endpoints
+// GET /settings/volume-units
+router.get("/volume-units", authenticateToken, async (req, res) => {
+  const units = await db
+    .select()
+    .from(volumeUnits)
+    .orderBy(volumeUnits.unit);
+  res.json(units);
+});
+
+// POST /settings/volume-units
+router.post("/volume-units", authenticateToken, async (req, res) => {
+  try {
+    const { unit } = volumeUnitSchema.parse(req.body);
+
+    // Check if unit already exists
+    const existing = await db
+      .select()
+      .from(volumeUnits)
+      .where(eq(volumeUnits.unit, unit))
+      .limit(1);
+
+    if (existing.length > 0) {
+      return res
+        .status(400)
+        .json({ message: "Volume unit already exists" });
+    }
+
+    const [newUnit] = await db
+      .insert(volumeUnits)
+      .values({
+        unit,
+        lastUpdatedBy: req.user!.id,
+      })
+      .returning();
+
+    res.status(201).json(newUnit);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ message: error.errors[0].message });
+    }
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+// PUT /settings/volume-units/:id
+router.put("/volume-units/:id", authenticateToken, async (req, res) => {
+  try {
+    const { unit } = volumeUnitSchema.parse(req.body);
+    const { id } = req.params;
+
+    // Check if unit already exists for other records
+    const existing = await db
+      .select()
+      .from(volumeUnits)
+      .where(eq(volumeUnits.unit, unit))
+      .limit(1);
+
+    if (existing.length > 0 && existing[0].id !== id) {
+      return res
+        .status(400)
+        .json({ message: "Volume unit already exists" });
+    }
+
+    const [updatedUnit] = await db
+      .update(volumeUnits)
+      .set({
+        unit,
+        updatedAt: new Date(),
+        lastUpdatedBy: req.user!.id,
+      })
+      .where(eq(volumeUnits.id, id))
+      .returning();
+
+    if (!updatedUnit) {
+      return res.status(404).json({ message: "Volume unit not found" });
+    }
+
+    res.json(updatedUnit);
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ message: error.errors[0].message });
+    }
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+// DELETE /settings/volume-units/:id
+router.delete("/volume-units/:id", authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const [deletedUnit] = await db
+      .delete(volumeUnits)
+      .where(eq(volumeUnits.id, id))
+      .returning();
+
+    if (!deletedUnit) {
+      return res.status(404).json({ message: "Volume unit not found" });
+    }
+
+    res.json(deletedUnit);
+  } catch (error) {
+    res.status(500).json({ message: "Internal server error" });
+  }
 });
 
 export default router;

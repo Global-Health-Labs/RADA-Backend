@@ -6,6 +6,7 @@ import {
   users,
   masterMixes,
   masterMixRecipes,
+  liquidTypes,
 } from "../db/schema";
 import { authenticateToken } from "../middleware/auth";
 import { DISPENSE_TYPES } from "../constants";
@@ -195,18 +196,6 @@ async function formatExperimentData(
   };
 }
 
-// Lookup object for tip washing based on liquid type
-const TIP_WASHING_LOOKUP = {
-  water: "Yes",
-  buffer: "No",
-  primers: "Yes",
-  enzymes: "No",
-  template: "No",
-  organics: "No",
-  detergent: "No",
-  mastermix: "No",
-} as const;
-
 // Get all experiments
 router.get("/", authenticateToken, async (req: Request, res: Response) => {
   try {
@@ -327,6 +316,8 @@ router.post(
         .where(eq(masterMixes.experimentalPlanId, experimentId))
         .max(masterMixes.orderIndex);
 
+      const allLiquidTypes = await db.select().from(liquidTypes);
+
       const newOrderIndex = (maxOrderIndex[0].max || 0) + 1;
 
       // Create mastermix
@@ -343,16 +334,24 @@ router.post(
       if (recipes && recipes.length > 0) {
         for (let i = 0; i < recipes.length; i++) {
           const recipe = recipes[i];
+          const recipeLiquidType = allLiquidTypes.find(
+            (lt) => lt.value === recipe.liquidType
+          );
+
+          console.log(
+            "recipeLiquidType",
+            recipe.liquidType,
+            "tip",
+            recipeLiquidType?.needsTipWashing
+          );
+
           await db.insert(masterMixRecipes).values({
             mastermixId: newMastermix[0].id,
             orderIndex: i + 1,
             finalSource: recipe.finalSource,
             unit: recipe.unit,
             finalConcentration: recipe.finalConcentration,
-            tipWashing:
-              TIP_WASHING_LOOKUP[
-                recipe.liquidType as keyof typeof TIP_WASHING_LOOKUP
-              ] || "No",
+            tipWashing: recipeLiquidType?.needsTipWashing ? "Yes" : "No",
             stockConcentration: recipe.stockConcentration,
             liquidType: recipe.liquidType,
             dispenseType: recipe.dispenseType,
@@ -428,6 +427,8 @@ router.put(
       const { mastermixId } = req.params;
       const { nameOfMasterMix, recipes } = req.body;
 
+      const allLiquidTypes = await db.select().from(liquidTypes);
+
       const updatedMastermix = await db
         .update(masterMixes)
         .set({
@@ -451,16 +452,16 @@ router.put(
         // Add new recipes
         for (let i = 0; i < recipes.length; i++) {
           const recipe = recipes[i];
+          const recipeLiquidType = allLiquidTypes.find(
+            (l) => l.value === recipe.liquidType
+          );
           await db.insert(masterMixRecipes).values({
             mastermixId,
             orderIndex: i + 1,
             finalSource: recipe.finalSource,
             unit: recipe.unit,
             finalConcentration: recipe.finalConcentration,
-            tipWashing:
-              TIP_WASHING_LOOKUP[
-                recipe.liquidType as keyof typeof TIP_WASHING_LOOKUP
-              ] || "No",
+            tipWashing: recipeLiquidType?.needsTipWashing ? "Yes" : "No",
             stockConcentration: recipe.stockConcentration,
             liquidType: recipe.liquidType,
             dispenseType: recipe.dispenseType,
@@ -522,6 +523,8 @@ router.put("/:id/mastermix", async (req: Request, res: Response) => {
       .select()
       .from(masterMixes)
       .where(eq(masterMixes.experimentalPlanId, experimentId));
+
+    const allLiquidTypes = await db.select().from(liquidTypes);
 
     // Find mastermixes to delete (those in DB but not in payload)
     const mastermixesToDelete = existingMastermixes.filter(
@@ -591,6 +594,10 @@ router.put("/:id/mastermix", async (req: Request, res: Response) => {
               (r) => r.id === reagent.id
             );
 
+            const recipeLiquidType = allLiquidTypes.find(
+              (lt) => lt.value === reagent.liquidType
+            );
+
             if (isExistingReagent) {
               // Update existing recipe
               await tx
@@ -605,10 +612,7 @@ router.put("/:id/mastermix", async (req: Request, res: Response) => {
                     index === 0
                       ? DISPENSE_TYPES.JET_EMPTY
                       : DISPENSE_TYPES.SURFACE_EMPTY,
-                  tipWashing:
-                    TIP_WASHING_LOOKUP[
-                      reagent.liquidType as keyof typeof TIP_WASHING_LOOKUP
-                    ] || "No",
+                  tipWashing: recipeLiquidType?.needsTipWashing ? "Yes" : "No",
                   orderIndex: index + 1, // Add 1-based order index
                 })
                 .where(eq(masterMixRecipes.id, reagent.id));
@@ -626,10 +630,7 @@ router.put("/:id/mastermix", async (req: Request, res: Response) => {
                   index === 0
                     ? DISPENSE_TYPES.JET_EMPTY
                     : DISPENSE_TYPES.SURFACE_EMPTY,
-                tipWashing:
-                  TIP_WASHING_LOOKUP[
-                    reagent.liquidType as keyof typeof TIP_WASHING_LOOKUP
-                  ] || "No",
+                tipWashing: recipeLiquidType?.needsTipWashing ? "Yes" : "No",
                 orderIndex: index + 1, // Add 1-based order index
               });
             }
@@ -645,24 +646,27 @@ router.put("/:id/mastermix", async (req: Request, res: Response) => {
           // Create all its recipes
           if (mastermix.reagents?.length > 0) {
             await tx.insert(masterMixRecipes).values(
-              mastermix.reagents.map((reagent: any, index: number) => ({
-                id: reagent.id,
-                mastermixId: mastermix.id,
-                finalSource: reagent.source,
-                unit: reagent.unit,
-                finalConcentration: reagent.finalConcentration,
-                stockConcentration: reagent.stockConcentration,
-                liquidType: reagent.liquidType,
-                dispenseType:
-                  index === 0
-                    ? DISPENSE_TYPES.JET_EMPTY
-                    : DISPENSE_TYPES.SURFACE_EMPTY,
-                tipWashing:
-                  TIP_WASHING_LOOKUP[
-                    reagent.liquidType as keyof typeof TIP_WASHING_LOOKUP
-                  ] || "No",
-                orderIndex: index + 1, // Add 1-based order index
-              }))
+              mastermix.reagents.map((reagent: any, index: number) => {
+                const recipeLiquidType = allLiquidTypes.find(
+                  (lt) => lt.value === reagent.liquidType
+                );
+
+                return {
+                  id: reagent.id,
+                  mastermixId: mastermix.id,
+                  finalSource: reagent.source,
+                  unit: reagent.unit,
+                  finalConcentration: reagent.finalConcentration,
+                  stockConcentration: reagent.stockConcentration,
+                  liquidType: reagent.liquidType,
+                  dispenseType:
+                    index === 0
+                      ? DISPENSE_TYPES.JET_EMPTY
+                      : DISPENSE_TYPES.SURFACE_EMPTY,
+                  tipWashing: recipeLiquidType?.needsTipWashing ? "Yes" : "No",
+                  orderIndex: index + 1, // Add 1-based order index
+                };
+              })
             );
           }
         }
