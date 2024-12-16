@@ -5,9 +5,8 @@ import config from "../config";
 import { db } from "../db";
 import { roles, users } from "../db/schema";
 import { authenticateToken } from "../middleware/auth";
-import { comparePassword, hashPassword } from "../utils/auth";
 import { sendResetPasswordEmail } from "../services/email.service";
-import { v4 as uuidv4 } from "uuid";
+import { comparePassword, hashPassword } from "../utils/auth";
 
 const router = Router();
 
@@ -30,6 +29,13 @@ router.post("/login", async (req: Request, res: Response) => {
 
     if (!user || !role) {
       return res.status(401).json({ message: "Invalid email or password" });
+    }
+
+    // Check if user is disabled
+    if (user.status === "disabled") {
+      return res.status(403).json({
+        message: "Account is disabled. Please contact the administrator.",
+      });
     }
 
     // Check password
@@ -112,9 +118,12 @@ router.post("/forgot-password", async (req: Request, res: Response) => {
       .limit(1);
 
     if (!user) {
-      // For security reasons, don't reveal if the email exists
-      return res.json({
-        message: "If the email exists, reset instructions will be sent.",
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (user.status === "disabled") {
+      return res.status(403).json({
+        message: "Account is disabled. Please contact the administrator.",
       });
     }
 

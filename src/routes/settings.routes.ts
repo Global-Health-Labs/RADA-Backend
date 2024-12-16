@@ -3,7 +3,13 @@ import { Router } from "express";
 import { z } from "zod";
 import { db } from "../db";
 import { liquidTypes, volumeUnits } from "../db/schema";
-import { authenticateToken } from "../middleware/auth";
+import { authenticateToken, requireAdmin } from "../middleware/auth";
+import {
+  getDeckLayouts,
+  getDeckLayout,
+  createDeckLayout,
+  updateDeckLayout,
+} from "../controllers/deck-layouts.controller";
 
 const router = Router();
 
@@ -17,7 +23,7 @@ const volumeUnitSchema = z.object({
 });
 
 // GET /settings/liquid-types
-router.get("/liquid-types", authenticateToken, async (req, res) => {
+router.get("/liquid-types", async (req, res) => {
   const types = await db
     .select()
     .from(liquidTypes)
@@ -26,7 +32,7 @@ router.get("/liquid-types", authenticateToken, async (req, res) => {
 });
 
 // POST /settings/liquid-types
-router.post("/liquid-types", authenticateToken, async (req, res) => {
+router.post("/liquid-types", async (req, res) => {
   try {
     const { value, displayName } = liquidTypeSchema.parse(req.body);
 
@@ -55,34 +61,36 @@ router.post("/liquid-types", authenticateToken, async (req, res) => {
     res.status(201).json(newType);
   } catch (error: any) {
     console.error("Error creating liquid type:", error);
-    
+
     // Check for validation errors from Zod
-    if (error.name === 'ZodError') {
-      return res.status(400).json({ 
-        message: "Invalid input data", 
-        error: error.errors 
+    if (error.name === "ZodError") {
+      return res.status(400).json({
+        message: "Invalid input data",
+        error: error.errors,
       });
     }
 
     // Check if error message indicates a unique constraint violation
-    if (error.message?.toLowerCase().includes('unique') || 
-        error.message?.toLowerCase().includes('duplicate') ||
-        error.message?.toLowerCase().includes('violation')) {
-      return res.status(409).json({ 
+    if (
+      error.message?.toLowerCase().includes("unique") ||
+      error.message?.toLowerCase().includes("duplicate") ||
+      error.message?.toLowerCase().includes("violation")
+    ) {
+      return res.status(409).json({
         message: "A liquid type with this value already exists",
-        error: error.message 
+        error: error.message,
       });
     }
 
-    res.status(500).json({ 
-      message: "Failed to create liquid type", 
-      error: error.message 
+    res.status(500).json({
+      message: "Failed to create liquid type",
+      error: error.message,
     });
   }
 });
 
 // PUT /settings/liquid-types/:id
-router.put("/liquid-types/:id", authenticateToken, async (req, res) => {
+router.put("/liquid-types/:id", async (req, res) => {
   try {
     const { id } = req.params;
     const { value, displayName } = liquidTypeSchema.parse(req.body);
@@ -117,43 +125,47 @@ router.put("/liquid-types/:id", authenticateToken, async (req, res) => {
     res.json(updatedType);
   } catch (error: any) {
     console.error("Error updating liquid type:", error);
-    
+
     // Check for validation errors from Zod
-    if (error.name === 'ZodError') {
-      return res.status(400).json({ 
-        message: "Invalid input data", 
-        error: error.errors 
+    if (error.name === "ZodError") {
+      return res.status(400).json({
+        message: "Invalid input data",
+        error: error.errors,
       });
     }
 
     // Check if error message indicates a unique constraint violation
-    if (error.message?.toLowerCase().includes('unique') || 
-        error.message?.toLowerCase().includes('duplicate') ||
-        error.message?.toLowerCase().includes('violation')) {
-      return res.status(409).json({ 
+    if (
+      error.message?.toLowerCase().includes("unique") ||
+      error.message?.toLowerCase().includes("duplicate") ||
+      error.message?.toLowerCase().includes("violation")
+    ) {
+      return res.status(409).json({
         message: "A liquid type with this value already exists",
-        error: error.message 
+        error: error.message,
       });
     }
 
     // Check for invalid ID format
-    if (error.message?.toLowerCase().includes('invalid') && 
-        error.message?.toLowerCase().includes('id')) {
-      return res.status(400).json({ 
+    if (
+      error.message?.toLowerCase().includes("invalid") &&
+      error.message?.toLowerCase().includes("id")
+    ) {
+      return res.status(400).json({
         message: "Invalid liquid type ID format",
-        error: error.message 
+        error: error.message,
       });
     }
 
-    res.status(500).json({ 
-      message: "Failed to update liquid type", 
-      error: error.message 
+    res.status(500).json({
+      message: "Failed to update liquid type",
+      error: error.message,
     });
   }
 });
 
 // DELETE /settings/liquid-types/:id
-router.delete("/liquid-types/:id", authenticateToken, async (req, res) => {
+router.delete("/liquid-types/:id", async (req, res) => {
   const { id } = req.params;
 
   const [deletedType] = await db
@@ -170,16 +182,13 @@ router.delete("/liquid-types/:id", authenticateToken, async (req, res) => {
 
 // Volume Units Endpoints
 // GET /settings/volume-units
-router.get("/volume-units", authenticateToken, async (req, res) => {
-  const units = await db
-    .select()
-    .from(volumeUnits)
-    .orderBy(volumeUnits.unit);
+router.get("/volume-units", async (req, res) => {
+  const units = await db.select().from(volumeUnits).orderBy(volumeUnits.unit);
   res.json(units);
 });
 
 // POST /settings/volume-units
-router.post("/volume-units", authenticateToken, async (req, res) => {
+router.post("/volume-units", async (req, res) => {
   try {
     const { unit } = volumeUnitSchema.parse(req.body);
 
@@ -191,9 +200,7 @@ router.post("/volume-units", authenticateToken, async (req, res) => {
       .limit(1);
 
     if (existing.length > 0) {
-      return res
-        .status(400)
-        .json({ message: "Volume unit already exists" });
+      return res.status(400).json({ message: "Volume unit already exists" });
     }
 
     const [newUnit] = await db
@@ -214,7 +221,7 @@ router.post("/volume-units", authenticateToken, async (req, res) => {
 });
 
 // PUT /settings/volume-units/:id
-router.put("/volume-units/:id", authenticateToken, async (req, res) => {
+router.put("/volume-units/:id", async (req, res) => {
   try {
     const { unit } = volumeUnitSchema.parse(req.body);
     const { id } = req.params;
@@ -227,9 +234,7 @@ router.put("/volume-units/:id", authenticateToken, async (req, res) => {
       .limit(1);
 
     if (existing.length > 0 && existing[0].id !== id) {
-      return res
-        .status(400)
-        .json({ message: "Volume unit already exists" });
+      return res.status(400).json({ message: "Volume unit already exists" });
     }
 
     const [updatedUnit] = await db
@@ -256,7 +261,7 @@ router.put("/volume-units/:id", authenticateToken, async (req, res) => {
 });
 
 // DELETE /settings/volume-units/:id
-router.delete("/volume-units/:id", authenticateToken, async (req, res) => {
+router.delete("/volume-units/:id", async (req, res) => {
   try {
     const { id } = req.params;
 
@@ -274,5 +279,13 @@ router.delete("/volume-units/:id", authenticateToken, async (req, res) => {
     res.status(500).json({ message: "Internal server error" });
   }
 });
+
+// Deck Layout Routes
+router.get("/naat/deck-layouts", getDeckLayouts);
+router.get("/naat/deck-layouts/:id", getDeckLayout);
+router.post("/naat/deck-layouts", createDeckLayout);
+router.put("/naat/deck-layouts/:id", updateDeckLayout);
+
+router.use(authenticateToken);
 
 export default router;

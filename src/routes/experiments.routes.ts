@@ -7,6 +7,7 @@ import {
   masterMixes,
   masterMixRecipes,
   liquidTypes,
+  deckLayouts,
 } from "../db/schema";
 import { authenticateToken } from "../middleware/auth";
 import { DISPENSE_TYPES } from "../constants";
@@ -118,6 +119,7 @@ async function getMastermixesForExperiment(experimentId: string) {
     mastermixes: mastermixes.map((mix) => ({
       id: mix.id,
       name: mix.nameOfMastermix,
+      orderIndex: mix.orderIndex,
       reagents: recipes
         .filter((recipe) => recipe.mastermixId === mix.id)
         .map((recipe) => ({
@@ -128,6 +130,8 @@ async function getMastermixesForExperiment(experimentId: string) {
           stockConcentration: recipe.stockConcentration,
           liquidType: recipe.liquidType,
           dispenseType: recipe.dispenseType,
+          orderIndex: recipe.orderIndex,
+          tipWashing: recipe.tipWashing,
         })),
     })),
   };
@@ -136,50 +140,25 @@ async function getMastermixesForExperiment(experimentId: string) {
 // Helper function to format experiment data for client
 async function formatExperimentData(
   experiment: typeof experimentalPlans.$inferSelect,
-  ownerName: string
+  ownerName: string,
+  excludeRecipes: boolean = false
 ) {
-  // Get mastermixes for the experiment
-  const mastermixes = await db
-    .select()
-    .from(masterMixes)
-    .where(eq(masterMixes.experimentalPlanId, experiment.id))
-    .orderBy(masterMixes.orderIndex);
-
-  let recipes: (typeof masterMixRecipes.$inferSelect)[] = [];
-  if (mastermixes.length > 0) {
-    recipes = await db
+  // Get deck layout if it exists
+  let deckLayout = undefined;
+  if (experiment.deckLayoutId && !excludeRecipes) {
+    const layouts = await db
       .select()
-      .from(masterMixRecipes)
-      .where(
-        or(...mastermixes.map((m) => eq(masterMixRecipes.mastermixId, m.id)))
-      )
-      .orderBy(masterMixRecipes.orderIndex);
+      .from(deckLayouts)
+      .where(eq(deckLayouts.id, experiment.deckLayoutId))
+      .limit(1);
+    if (layouts.length > 0) {
+      deckLayout = layouts[0];
+    }
   }
 
-  const masterMixesWithRecipes = await Promise.all(
-    mastermixes.map(async (mastermix) => {
-      const recipesForMastermix = recipes.filter(
-        (recipe) => recipe.mastermixId === mastermix.id
-      );
-
-      return {
-        id: mastermix.id,
-        orderIndex: mastermix.orderIndex,
-        nameOfMasterMix: mastermix.nameOfMastermix,
-        recipes: recipesForMastermix.map((recipe) => ({
-          id: recipe.id,
-          orderIndex: recipe.orderIndex,
-          finalSource: recipe.finalSource,
-          unit: recipe.unit,
-          finalConcentration: recipe.finalConcentration,
-          tipWashing: recipe.tipWashing,
-          stockConcentration: recipe.stockConcentration,
-          liquidType: recipe.liquidType,
-          dispenseType: recipe.dispenseType,
-        })),
-      };
-    })
-  );
+  const mastermixesWithRecipes = excludeRecipes
+    ? undefined
+    : await getMastermixesForExperiment(experiment.id);
 
   return {
     id: experiment.id,
@@ -189,7 +168,9 @@ async function formatExperimentData(
     mastermixVolumePerReaction: experiment.mastermixVolumePerReaction,
     sampleVolumePerReaction: experiment.sampleVolumePerReaction,
     pcrPlateSize: experiment.pcrPlateSize,
-    masterMixes: masterMixesWithRecipes,
+    deckLayout,
+    deckLayoutId: experiment.deckLayoutId,
+    mastermixes: mastermixesWithRecipes?.mastermixes,
     ownerFullName: ownerName,
     createdAt: experiment.createdAt,
     updatedAt: experiment.updatedAt,
@@ -214,7 +195,11 @@ router.get("/", authenticateToken, async (req: Request, res: Response) => {
     );
     const experimentsData = await Promise.all(
       result.data.map(async ({ experiment, owner }) =>
-        formatExperimentData(experiment, owner?.fullname || "Owner not found")
+        formatExperimentData(
+          experiment,
+          owner?.fullname || "Owner not found",
+          true
+        )
       )
     );
 
@@ -276,6 +261,7 @@ router.post("/", authenticateToken, async (req: Request, res: Response) => {
       mastermixVolumePerReaction,
       sampleVolumePerReaction,
       pcrPlateSize,
+      deckLayoutId,
     } = req.body;
 
     const newExperiment = await db
@@ -287,6 +273,7 @@ router.post("/", authenticateToken, async (req: Request, res: Response) => {
         mastermixVolumePerReaction,
         sampleVolumePerReaction,
         pcrPlateSize,
+        deckLayoutId,
         ownerId: req.user!.id,
       })
       .returning();
@@ -338,13 +325,6 @@ router.post(
             (lt) => lt.value === recipe.liquidType
           );
 
-          console.log(
-            "recipeLiquidType",
-            recipe.liquidType,
-            "tip",
-            recipeLiquidType?.needsTipWashing
-          );
-
           await db.insert(masterMixRecipes).values({
             mastermixId: newMastermix[0].id,
             orderIndex: i + 1,
@@ -383,6 +363,7 @@ router.put(
         mastermixVolumePerReaction,
         sampleVolumePerReaction,
         pcrPlateSize,
+        deckLayoutId,
       } = req.body;
 
       const updatedExperiment = await db
@@ -394,6 +375,7 @@ router.put(
           mastermixVolumePerReaction,
           sampleVolumePerReaction,
           pcrPlateSize,
+          deckLayoutId,
           updatedAt: new Date(),
         })
         .where(
@@ -432,7 +414,7 @@ router.put(
       const updatedMastermix = await db
         .update(masterMixes)
         .set({
-          nameOfMastermix,
+          nameOfMastermix: nameOfMasterMix,
           updatedAt: new Date(),
         })
         .where(eq(masterMixes.id, mastermixId))

@@ -7,6 +7,7 @@ import {
   integer,
   text,
   real,
+  jsonb,
 } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
@@ -18,6 +19,7 @@ export const users = pgTable("user", {
   roleId: uuid("role_id").references(() => roles.id),
   roleUpdatedAt: timestamp("role_updated_at").defaultNow(),
   confirmed: boolean("confirmed").default(false).notNull(),
+  status: text("status", { enum: ["active", "disabled"] }).default("active").notNull(),
 });
 
 export const roles = pgTable("role", {
@@ -59,6 +61,7 @@ export const experimentalPlans = pgTable("experimental_plan", {
   mastermixVolumePerReaction: integer("mastermix_volume_per_reaction"),
   sampleVolumePerReaction: integer("sample_volume_per_reaction"),
   pcrPlateSize: integer("pcr_plate_size"),
+  deckLayoutId: uuid("deck_layout_id").references(() => deckLayouts.id),
   ownerId: uuid("owner_id").references(() => users.id),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
@@ -101,6 +104,22 @@ export const volumeUnits = pgTable("volume_unit", {
     .notNull(),
 });
 
+export const deckLayouts = pgTable("deck_layout", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: varchar("name", { length: 255 }).notNull().unique(),
+  description: text("description"),
+  platePositions: jsonb("plate_positions").notNull().$type<
+    {
+      id: string;
+      name: string;
+      position: number;
+    }[]
+  >(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  createdBy: uuid("created_by").references(() => users.id),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ one }) => ({
   role: one(roles, {
@@ -134,6 +153,10 @@ export const experimentalPlansRelations = relations(
       fields: [experimentalPlans.ownerId],
       references: [users.id],
     }),
+    deckLayout: one(deckLayouts, {
+      fields: [experimentalPlans.deckLayoutId],
+      references: [deckLayouts.id],
+    }),
     masterMixes: many(masterMixes),
     documents: many(documents),
   })
@@ -143,5 +166,12 @@ export const documentsRelations = relations(documents, ({ one }) => ({
   experimentalPlan: one(experimentalPlans, {
     fields: [documents.experimentPlanId],
     references: [experimentalPlans.id],
+  }),
+}));
+
+export const deckLayoutsRelations = relations(deckLayouts, ({ one }) => ({
+  creator: one(users, {
+    fields: [deckLayouts.createdBy],
+    references: [users.id],
   }),
 }));

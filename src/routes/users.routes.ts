@@ -1,23 +1,17 @@
-import { Router, Request, Response } from "express";
 import { eq } from "drizzle-orm";
+import { Request, Response, Router } from "express";
 import { db } from "../db";
-import { users, roles } from "../db/schema";
+import { roles, users } from "../db/schema";
 import { authenticateToken } from "../middleware/auth";
-import { hashPassword, generateTemporaryPassword } from "../utils/auth";
 import { sendEmail } from "../services/email.service";
 import { generateInvitationEmail } from "../templates/invitation-email";
+import { generateTemporaryPassword, hashPassword } from "../utils/auth";
 
 const router = Router();
 
 // Create new user
-router.post("/", authenticateToken, async (req: Request, res: Response) => {
+router.post("/", async (req: Request, res: Response) => {
   try {
-    console.log("Received user creation request:", {
-      email: req.body.email,
-      fullname: req.body.fullname,
-      role: req.body.role,
-    });
-
     const { email, fullname, role } = req.body;
 
     // Check if email already exists
@@ -51,13 +45,10 @@ router.post("/", authenticateToken, async (req: Request, res: Response) => {
 
     // Generate temporary password
     const tempPassword = generateTemporaryPassword();
-    console.log("Generated temporary password");
 
     const hashedPassword = await hashPassword(tempPassword);
-    console.log("Hashed password generated");
 
     // Create user
-    console.log("Creating user in database...");
     const [newUser] = await db
       .insert(users)
       .values({
@@ -69,24 +60,15 @@ router.post("/", authenticateToken, async (req: Request, res: Response) => {
       })
       .returning();
 
-    console.log("User created successfully:", {
-      userId: newUser.id,
-      email: newUser.email,
-      fullname: newUser.fullname,
-    });
-
     // Generate and send invitation email
-    console.log("Generating invitation email...");
     const emailHtml = generateInvitationEmail(fullname, email, tempPassword);
 
-    console.log("Sending invitation email...");
     await sendEmail(email, "Welcome to RADA - Your Account Details", emailHtml);
-    console.log("Invitation email sent successfully");
 
     // Return user data (without password)
     const { password: _, ...userWithoutPassword } = newUser;
     res.status(201).json(userWithoutPassword);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Create user error:", {
       error: error.message,
       stack: error.stack,
@@ -99,7 +81,7 @@ router.post("/", authenticateToken, async (req: Request, res: Response) => {
 });
 
 // Get all roles
-router.get("/roles", authenticateToken, async (req: Request, res: Response) => {
+router.get("/roles", async (req: Request, res: Response) => {
   try {
     const rolesList = await db.select().from(roles);
     return res.json(rolesList);
@@ -110,7 +92,7 @@ router.get("/roles", authenticateToken, async (req: Request, res: Response) => {
 });
 
 // Get users with roles
-router.get("/", authenticateToken, async (req: Request, res: Response) => {
+router.get("/", async (req: Request, res: Response) => {
   try {
     const usersWithRoles = await db
       .select({
@@ -119,6 +101,7 @@ router.get("/", authenticateToken, async (req: Request, res: Response) => {
         email: users.email,
         role: roles.name,
         role_updated_at: users.roleUpdatedAt,
+        status: users.status,
       })
       .from(users)
       .leftJoin(roles, eq(users.roleId, roles.id));
@@ -133,136 +116,147 @@ router.get("/", authenticateToken, async (req: Request, res: Response) => {
 });
 
 // Update user
-router.put(
-  "/:userId",
-  authenticateToken,
-  async (req: Request, res: Response) => {
-    try {
-      const { userId } = req.params;
-      const { fullname, role } = req.body;
+router.put("/:userId", async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+    const { fullname, role } = req.body;
 
-      // Get user and current role
-      const [userWithRole] = await db
-        .select({
-          user: users,
-          role_name: roles.name,
-        })
-        .from(users)
-        .leftJoin(roles, eq(users.roleId, roles.id))
-        .where(eq(users.id, userId))
-        .limit(1);
+    // Get user and current role
+    const [userWithRole] = await db
+      .select({
+        user: users,
+        role_name: roles.name,
+      })
+      .from(users)
+      .leftJoin(roles, eq(users.roleId, roles.id))
+      .where(eq(users.id, userId))
+      .limit(1);
 
-      if (!userWithRole) {
-        return res.status(404).json({ message: "User not found" });
-      }
-
-      // Get role ID for the new role
-      const [roleRecord] = await db
-        .select()
-        .from(roles)
-        .where(eq(roles.name, role))
-        .limit(1);
-
-      if (!roleRecord) {
-        return res.status(400).json({ message: "Invalid role" });
-      }
-
-      // Update user's name and role
-      await db
-        .update(users)
-        .set({
-          fullname,
-          roleId: roleRecord.id,
-          roleUpdatedAt: new Date(),
-        })
-        .where(eq(users.id, userId));
-
-      // Get updated user data
-      const [updatedUser] = await db
-        .select({
-          user_id: users.id,
-          fullname: users.fullname,
-          email: users.email,
-          role: roles.name,
-        })
-        .from(users)
-        .leftJoin(roles, eq(users.roleId, roles.id))
-        .where(eq(users.id, userId))
-        .limit(1);
-
-      res.json(updatedUser);
-    } catch (error) {
-      console.error("Update user error:", error);
-      res
-        .status(500)
-        .json({ message: "Failed to update user", error: error.message });
+    if (!userWithRole) {
+      return res.status(404).json({ message: "User not found" });
     }
+
+    // Get role ID for the new role
+    const [roleRecord] = await db
+      .select()
+      .from(roles)
+      .where(eq(roles.name, role))
+      .limit(1);
+
+    if (!roleRecord) {
+      return res.status(400).json({ message: "Invalid role" });
+    }
+
+    // Update user's name and role
+    await db
+      .update(users)
+      .set({
+        fullname,
+        roleId: roleRecord.id,
+        roleUpdatedAt: new Date(),
+      })
+      .where(eq(users.id, userId));
+
+    // Get updated user data
+    const [updatedUser] = await db
+      .select({
+        user_id: users.id,
+        fullname: users.fullname,
+        email: users.email,
+        role: roles.name,
+      })
+      .from(users)
+      .leftJoin(roles, eq(users.roleId, roles.id))
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    res.json(updatedUser);
+  } catch (error) {
+    console.error("Update user error:", error);
+    res
+      .status(500)
+      .json({ message: "Failed to update user", error: error.message });
   }
-);
+});
 
 // Update user role
-router.patch(
-  "/:userId/role",
-  authenticateToken,
-  async (req: Request, res: Response) => {
-    try {
-      const { userId } = req.params;
-      const { newRole } = req.body;
+router.patch("/:userId/role", async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.params;
+    const { newRole } = req.body;
 
-      // Get user and current role
-      const [userWithRole] = await db
-        .select({
-          user: users,
-          role_name: roles.name,
-        })
-        .from(users)
-        .leftJoin(roles, eq(users.roleId, roles.id))
-        .where(eq(users.id, userId))
-        .limit(1);
+    // Get user and current role
+    const [userWithRole] = await db
+      .select({
+        user: users,
+        role_name: roles.name,
+      })
+      .from(users)
+      .leftJoin(roles, eq(users.roleId, roles.id))
+      .where(eq(users.id, userId))
+      .limit(1);
 
-      if (!userWithRole) {
-        return res.status(404).json({ message: "User not found" });
-      }
-
-      const currentRole = userWithRole.role_name;
-
-      // Get new role ID
-      const [role] = await db
-        .select()
-        .from(roles)
-        .where(eq(roles.name, newRole))
-        .limit(1);
-
-      if (!role) {
-        return res.status(400).json({ message: "Invalid role" });
-      }
-
-      // Check if the role is actually changing
-      if (currentRole === newRole) {
-        return res.status(400).json({ message: "User already has this role" });
-      }
-
-      // Update user's role
-      const [updatedUser] = await db
-        .update(users)
-        .set({
-          roleId: role.id,
-          roleUpdatedAt: new Date(),
-        })
-        .where(eq(users.id, userId))
-        .returning();
-
-      res.json({
-        message: "Role updated successfully",
-        user: updatedUser,
-      });
-    } catch (error) {
-      console.error("Update user role error:", error);
-      res
-        .status(500)
-        .json({ message: "Failed to update user role", error: error.message });
+    if (!userWithRole) {
+      return res.status(404).json({ message: "User not found" });
     }
+
+    const currentRole = userWithRole.role_name;
+
+    // Get new role ID
+    const [role] = await db
+      .select()
+      .from(roles)
+      .where(eq(roles.name, newRole))
+      .limit(1);
+
+    if (!role) {
+      return res.status(400).json({ message: "Invalid role" });
+    }
+
+    // Check if the role is actually changing
+    if (currentRole === newRole) {
+      return res.status(400).json({ message: "User already has this role" });
+    }
+
+    // Update user's role
+    const [updatedUser] = await db
+      .update(users)
+      .set({
+        roleId: role.id,
+        roleUpdatedAt: new Date(),
+      })
+      .where(eq(users.id, userId))
+      .returning();
+
+    res.json({
+      message: "Role updated successfully",
+      user: updatedUser,
+    });
+  } catch (error) {
+    console.error("Update user role error:", error);
+    res
+      .status(500)
+      .json({ message: "Failed to update user role", error: error.message });
   }
-);
+});
+
+// Update user status
+router.put("/:id/status", async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    if (!["active", "disabled"].includes(status)) {
+      return res.status(400).json({ message: "Invalid status value" });
+    }
+
+    await db.update(users).set({ status }).where(eq(users.id, id));
+
+    res.json({ message: "User status updated successfully" });
+  } catch (error) {
+    console.error("Error updating user status:", error);
+    res.status(500).json({ message: "Failed to update user status" });
+  }
+});
 
 export default router;
