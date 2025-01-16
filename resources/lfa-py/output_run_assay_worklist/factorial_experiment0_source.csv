@@ -1,0 +1,10 @@
+source,volume_total,from_plate,from_well,step,step_index,volume_ul
+CS031,64.0,ivl_384_flat_v1_0001,1,Step1,1,24.0
+CS034,64.0,ivl_384_flat_v1_0001,3,Step1,1,24.0
+D001-N1,64.0,ivl_384_flat_v1_0001,17,Step2,2,24.0
+D001-P1,64.0,ivl_384_flat_v1_0001,19,Step2,2,24.0
+D002-N1,64.0,ivl_384_flat_v1_0001,21,Step2,2,24.0
+D002-P1,64.0,ivl_384_flat_v1_0001,23,Step2,2,24.0
+D003-N1,64.0,ivl_384_flat_v1_0001,25,Step2,2,24.0
+D003-P1,64.0,ivl_384_flat_v1_0001,27,Step2,2,24.0
+camera,300.0,ivl_96_dw_v1_0001,1,Step3,3,240.0

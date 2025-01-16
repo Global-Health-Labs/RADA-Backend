@@ -1,13 +1,15 @@
 import { assignDestination } from "./assign_destination";
-import { assignSrc, SourceInfo, WorklistWithSrc } from "./assign_src";
+import { assignSrc } from "./assign_src";
 import { cleanupWorklist } from "./cleanup_worklist";
 import { getWorklistFullFactorial } from "./one_run";
 import { reorderGroups } from "./rearrange_worklist";
 import {
   ExperimentStep,
   PlateInfo,
+  SourceInfo,
   TimeInfo,
   WorklistWithDestination,
+  WorklistWithSrc,
 } from "./types";
 import { getPlateType } from "./utils";
 

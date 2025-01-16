@@ -19,7 +19,9 @@ export const users = pgTable("user", {
   roleId: uuid("role_id").references(() => roles.id),
   roleUpdatedAt: timestamp("role_updated_at").defaultNow(),
   confirmed: boolean("confirmed").default(false).notNull(),
-  status: text("status", { enum: ["active", "disabled"] }).default("active").notNull(),
+  status: text("status", { enum: ["active", "disabled"] })
+    .default("active")
+    .notNull(),
 });
 
 export const roles = pgTable("role", {
@@ -31,7 +33,7 @@ export const masterMixes = pgTable("master_mix", {
   id: uuid("id").defaultRandom().primaryKey(),
   nameOfMastermix: varchar("name_of_mastermix", { length: 50 }).notNull(),
   experimentalPlanId: uuid("experimental_plan_id").references(
-    () => experimentalPlans.id
+    () => naatExperiments.id
   ),
   orderIndex: integer("order_index"),
   createdAt: timestamp("created_at").defaultNow(),
@@ -53,9 +55,9 @@ export const masterMixRecipes = pgTable("master_mix_recipe", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-export const experimentalPlans = pgTable("experimental_plan", {
+export const naatExperiments = pgTable("experimental_plan", {
   id: uuid("id").defaultRandom().primaryKey(),
-  nameOfExperimentalPlan: varchar("name_of_experimental_plan", { length: 255 }),
+  name: varchar("name_of_experimental_plan", { length: 255 }),
   numOfSampleConcentrations: integer("num_of_sample_concentrations"),
   numOfTechnicalReplicates: integer("num_of_technical_replicates"),
   mastermixVolumePerReaction: integer("mastermix_volume_per_reaction"),
@@ -70,7 +72,7 @@ export const experimentalPlans = pgTable("experimental_plan", {
 export const documents = pgTable("document", {
   id: uuid("id").defaultRandom().primaryKey(),
   experimentPlanId: uuid("experiment_plan_id").references(
-    () => experimentalPlans.id
+    () => naatExperiments.id
   ),
   originalFileName: varchar("original_file_name", { length: 255 }).notNull(),
   secureFileName: varchar("secure_file_name", { length: 255 }).notNull(),
@@ -82,7 +84,7 @@ export const documents = pgTable("document", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-export const liquidTypes = pgTable("liquid_type", {
+export const naatLiquidTypes = pgTable("naat_liquid_type", {
   id: uuid("id").defaultRandom().primaryKey(),
   displayName: varchar("display_name", { length: 100 }).notNull(),
   value: varchar("value", { length: 100 }).notNull().unique(),
@@ -94,7 +96,18 @@ export const liquidTypes = pgTable("liquid_type", {
     .notNull(),
 });
 
-export const volumeUnits = pgTable("volume_unit", {
+export const lfaLiquidTypes = pgTable("lfa_liquid_type", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  displayName: varchar("display_name", { length: 100 }).notNull(),
+  value: varchar("value", { length: 100 }).notNull().unique(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  lastUpdatedBy: uuid("last_updated_by")
+    .references(() => users.id)
+    .notNull(),
+});
+
+export const volumeUnits = pgTable("naat_volume_unit", {
   id: uuid("id").defaultRandom().primaryKey(),
   unit: varchar("unit", { length: 50 }).notNull().unique(),
   createdAt: timestamp("created_at").defaultNow(),
@@ -104,7 +117,7 @@ export const volumeUnits = pgTable("volume_unit", {
     .notNull(),
 });
 
-export const deckLayouts = pgTable("deck_layout", {
+export const deckLayouts = pgTable("naat_deck_layout", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: varchar("name", { length: 255 }).notNull().unique(),
   description: text("description"),
@@ -120,6 +133,65 @@ export const deckLayouts = pgTable("deck_layout", {
   createdBy: uuid("created_by").references(() => users.id),
 });
 
+export const lfaExperiments = pgTable("lfa_experiment", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: varchar("name", { length: 100 }).notNull(),
+  numReplicates: integer("num_replicates").notNull(),
+  plateConfigId: uuid("plate_config_id")
+    .references(() => assayPlateConfigs.id)
+    .notNull(),
+  ownerId: uuid("owner_id")
+    .references(() => users.id)
+    .notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const lfaSteps = pgTable("lfa_step", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  experimentId: uuid("experiment_id").references(() => lfaExperiments.id),
+  step: varchar("step", { length: 100 }).notNull(),
+  dx: real("dx").notNull(),
+  dz: real("dz").notNull(),
+  volume: real("volume").notNull(),
+  liquidClass: varchar("liquid_class", { length: 50 }).notNull(),
+  time: real("time").notNull(),
+  source: text("source").notNull(),
+  orderIndex: integer("order_index").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export type PlateLocation = {
+  dx: number;
+  dz: number;
+};
+
+export const assayPlateConfigs = pgTable("assay_plate_config", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: varchar("name", { length: 100 }).notNull(),
+  description: text("description"),
+  assayPlatePrefix: varchar("assay_plate_prefix", { length: 50 }).notNull(),
+  numPlates: integer("num_plates").notNull(),
+  numStrips: integer("num_strips").notNull(),
+  numColumns: integer("num_columns").notNull(),
+  locations: jsonb("locations").notNull().$type<PlateLocation[]>(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export const reagentPlates = pgTable("lfa_reagent_plate", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  plate: varchar("plate", { length: 255 }).notNull().unique(),
+  volumeWell: real("volume_well").notNull(),
+  numRows: integer("num_rows").notNull(),
+  numCols: integer("num_cols").notNull(),
+  volumeHoldover: real("volume_holdover").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  lastUpdatedBy: uuid("last_updated_by").references(() => users.id),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ one }) => ({
   role: one(roles, {
@@ -129,9 +201,9 @@ export const usersRelations = relations(users, ({ one }) => ({
 }));
 
 export const masterMixesRelations = relations(masterMixes, ({ one, many }) => ({
-  experimentalPlan: one(experimentalPlans, {
+  experimentalPlan: one(naatExperiments, {
     fields: [masterMixes.experimentalPlanId],
-    references: [experimentalPlans.id],
+    references: [naatExperiments.id],
   }),
   recipes: many(masterMixRecipes),
 }));
@@ -147,14 +219,14 @@ export const masterMixRecipesRelations = relations(
 );
 
 export const experimentalPlansRelations = relations(
-  experimentalPlans,
+  naatExperiments,
   ({ one, many }) => ({
     owner: one(users, {
-      fields: [experimentalPlans.ownerId],
+      fields: [naatExperiments.ownerId],
       references: [users.id],
     }),
     deckLayout: one(deckLayouts, {
-      fields: [experimentalPlans.deckLayoutId],
+      fields: [naatExperiments.deckLayoutId],
       references: [deckLayouts.id],
     }),
     masterMixes: many(masterMixes),
@@ -163,9 +235,9 @@ export const experimentalPlansRelations = relations(
 );
 
 export const documentsRelations = relations(documents, ({ one }) => ({
-  experimentalPlan: one(experimentalPlans, {
+  experimentalPlan: one(naatExperiments, {
     fields: [documents.experimentPlanId],
-    references: [experimentalPlans.id],
+    references: [naatExperiments.id],
   }),
 }));
 
@@ -173,5 +245,27 @@ export const deckLayoutsRelations = relations(deckLayouts, ({ one }) => ({
   creator: one(users, {
     fields: [deckLayouts.createdBy],
     references: [users.id],
+  }),
+}));
+
+export const lfaExperimentsRelations = relations(
+  lfaExperiments,
+  ({ one, many }) => ({
+    owner: one(users, {
+      fields: [lfaExperiments.ownerId],
+      references: [users.id],
+    }),
+    plateConfig: one(assayPlateConfigs, {
+      fields: [lfaExperiments.plateConfigId],
+      references: [assayPlateConfigs.id],
+    }),
+    steps: many(lfaSteps),
+  })
+);
+
+export const lfaStepsRelations = relations(lfaSteps, ({ one }) => ({
+  experiment: one(lfaExperiments, {
+    fields: [lfaSteps.experimentId],
+    references: [lfaExperiments.id],
   }),
 }));

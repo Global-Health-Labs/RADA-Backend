@@ -1,0 +1,4 @@
+step,dx,dz,volume,liquid_class,time,source
+Step1,3,5,1,water,2,"CS031,CS034"
+Step2,3,5,3,pbst,4,"D001-N1,D001-P1,D002-N1,D002-P1,D003-N1,D003-P1"
+Step3,3,5,5,imaging,6,camera

@@ -1,0 +1,1 @@
+ALTER TABLE "lfa_step" ALTER COLUMN "source" SET DATA TYPE text;

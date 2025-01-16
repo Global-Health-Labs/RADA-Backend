@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import { Router } from "express";
 import { z } from "zod";
 import { db } from "../db";
-import { liquidTypes, volumeUnits } from "../db/schema";
+import { naatLiquidTypes, volumeUnits } from "../db/schema";
 import { authenticateToken, requireAdmin } from "../middleware/auth";
 import {
   getDeckLayouts,
@@ -22,16 +22,16 @@ const volumeUnitSchema = z.object({
   unit: z.string().min(1),
 });
 
-// GET /settings/liquid-types
+// GET /settings/naat/liquid-types
 router.get("/liquid-types", async (req, res) => {
   const types = await db
     .select()
-    .from(liquidTypes)
-    .orderBy(liquidTypes.displayName);
+    .from(naatLiquidTypes)
+    .orderBy(naatLiquidTypes.displayName);
   res.json(types);
 });
 
-// POST /settings/liquid-types
+// POST /settings/naat/liquid-types
 router.post("/liquid-types", async (req, res) => {
   try {
     const { value, displayName } = liquidTypeSchema.parse(req.body);
@@ -39,8 +39,8 @@ router.post("/liquid-types", async (req, res) => {
     // Check if value already exists
     const existing = await db
       .select()
-      .from(liquidTypes)
-      .where(eq(liquidTypes.value, value))
+      .from(naatLiquidTypes)
+      .where(eq(naatLiquidTypes.value, value))
       .limit(1);
 
     if (existing.length > 0) {
@@ -50,7 +50,7 @@ router.post("/liquid-types", async (req, res) => {
     }
 
     const [newType] = await db
-      .insert(liquidTypes)
+      .insert(naatLiquidTypes)
       .values({
         value,
         displayName,
@@ -89,7 +89,7 @@ router.post("/liquid-types", async (req, res) => {
   }
 });
 
-// PUT /settings/liquid-types/:id
+// PUT /settings/naat/liquid-types/:id
 router.put("/liquid-types/:id", async (req, res) => {
   try {
     const { id } = req.params;
@@ -98,8 +98,8 @@ router.put("/liquid-types/:id", async (req, res) => {
     // Check if value already exists for a different ID
     const existing = await db
       .select()
-      .from(liquidTypes)
-      .where(eq(liquidTypes.value, value))
+      .from(naatLiquidTypes)
+      .where(eq(naatLiquidTypes.value, value))
       .limit(1);
 
     if (existing.length > 0 && existing[0].id !== id) {
@@ -109,13 +109,13 @@ router.put("/liquid-types/:id", async (req, res) => {
     }
 
     const [updatedType] = await db
-      .update(liquidTypes)
+      .update(naatLiquidTypes)
       .set({
         value,
         displayName,
         lastUpdatedBy: req.user!.id,
       })
-      .where(eq(liquidTypes.id, id))
+      .where(eq(naatLiquidTypes.id, id))
       .returning();
 
     if (!updatedType) {
@@ -164,13 +164,13 @@ router.put("/liquid-types/:id", async (req, res) => {
   }
 });
 
-// DELETE /settings/liquid-types/:id
+// DELETE /settings/naat/liquid-types/:id
 router.delete("/liquid-types/:id", async (req, res) => {
   const { id } = req.params;
 
   const [deletedType] = await db
-    .delete(liquidTypes)
-    .where(eq(liquidTypes.id, id))
+    .delete(naatLiquidTypes)
+    .where(eq(naatLiquidTypes.id, id))
     .returning();
 
   if (!deletedType) {
@@ -181,13 +181,13 @@ router.delete("/liquid-types/:id", async (req, res) => {
 });
 
 // Volume Units Endpoints
-// GET /settings/volume-units
+// GET /settings/naat/volume-units
 router.get("/volume-units", async (req, res) => {
   const units = await db.select().from(volumeUnits).orderBy(volumeUnits.unit);
   res.json(units);
 });
 
-// POST /settings/volume-units
+// POST /settings/naat/volume-units
 router.post("/volume-units", async (req, res) => {
   try {
     const { unit } = volumeUnitSchema.parse(req.body);
@@ -220,7 +220,7 @@ router.post("/volume-units", async (req, res) => {
   }
 });
 
-// PUT /settings/volume-units/:id
+// PUT /settings/naat/volume-units/:id
 router.put("/volume-units/:id", async (req, res) => {
   try {
     const { unit } = volumeUnitSchema.parse(req.body);
@@ -260,7 +260,7 @@ router.put("/volume-units/:id", async (req, res) => {
   }
 });
 
-// DELETE /settings/volume-units/:id
+// DELETE /settings/naat/volume-units/:id
 router.delete("/volume-units/:id", async (req, res) => {
   try {
     const { id } = req.params;
@@ -281,11 +281,9 @@ router.delete("/volume-units/:id", async (req, res) => {
 });
 
 // Deck Layout Routes
-router.get("/naat/deck-layouts", getDeckLayouts);
-router.get("/naat/deck-layouts/:id", getDeckLayout);
-router.post("/naat/deck-layouts", createDeckLayout);
-router.put("/naat/deck-layouts/:id", updateDeckLayout);
-
-router.use(authenticateToken);
+router.get("/deck-layouts", getDeckLayouts);
+router.get("/deck-layouts/:id", getDeckLayout);
+router.post("/deck-layouts", createDeckLayout);
+router.put("/deck-layouts/:id", updateDeckLayout);
 
 export default router;

@@ -1,34 +1,10 @@
 import { getTipType } from "./cleanup_worklist";
-import { WorklistWithDestination } from "./types";
-
-export interface PlateInfo {
-  plate: string;
-  volume_well: number;
-  volume_holdover: number;
-  volume_usable?: number;
-  nrow: number;
-  ncol: number;
-}
-
-export interface SourceInfo {
-  source: string;
-  volume_ul: number;
-  step_index: number;
-  step: string;
-  volume_usable?: number;
-  plate?: string;
-  plate_well?: number;
-  plate_index?: number;
-  from_plate?: string;
-  from_well?: number;
-  nrow?: number;
-  ncol?: number;
-}
-
-export type WorklistWithSrc = {
-  from_plate: string;
-  from_well: number;
-} & WorklistWithDestination;
+import {
+  PlateInfo,
+  SourceInfo,
+  WorklistWithDestination,
+  WorklistWithSrc,
+} from "./types";
 
 export interface AssignSrcResult {
   worklist: WorklistWithSrc[];
@@ -110,11 +86,23 @@ export function assignSrc(
     plateNames.forEach((plate) => {
       if (!plate) return;
 
+      // Get all sources for this step and plate
       let subDf = sourceDf.filter((s) => s.step === step && s.plate === plate);
       if (subDf.length === 0) return;
 
-      // Always assign well 1 for both reservoir and 384-well plates
-      subDf.forEach((source) => {
+      const plateData = plates.find((p) => p.plate === plate);
+      if (!plateData) return;
+
+      // Sort sources by their original order in the worklist
+      subDf.sort((a, b) => {
+        const aIndex = worklist.findIndex((w) => w.source === a.source);
+        const bIndex = worklist.findIndex((w) => w.source === b.source);
+        return aIndex - bIndex;
+      });
+      // Calculate well numbers based on plate dimensions
+      const nwellsPerPlate = plateData.nrow * plateData.ncol;
+
+      subDf.forEach((source, index) => {
         const idx = sourceDf.findIndex(
           (s) =>
             s.source === source.source &&
@@ -122,7 +110,11 @@ export function assignSrc(
             s.plate === source.plate
         );
         if (idx !== -1) {
-          sourceDf[idx].plate_well = 1;
+          // Python: well_df.loc[sub.index.values, 'well_number'] = plate_well % nwellperplate + 1
+          const wellNumber = (index % nwellsPerPlate) + 1;
+          sourceDf[idx].plate_well = wellNumber;
+          // Python: well_df.loc[sub.index.values, 'plate_number'] = np.floor(plate_well / nwellperplate) + 1
+          sourceDf[idx].plate_index = Math.floor(index / nwellsPerPlate) + 1;
         }
       });
     });
@@ -144,22 +136,10 @@ export function assignSrc(
     const plateInfo = plates.find((p) => p.plate === plate);
     if (!plateInfo) return;
 
-    const wellsPerPlate = plateInfo.nrow * plateInfo.ncol;
-    let currentPlateIndex = 1;
-    let currentWellCount = 0;
-
     sources.forEach((source) => {
-      if (!source.plate_well) return;
-      currentWellCount++;
-      if (currentWellCount > wellsPerPlate) {
-        currentPlateIndex++;
-        currentWellCount = 1;
-      }
-      source.plate_index = currentPlateIndex;
-      source.from_plate = `${source.plate}_${String(currentPlateIndex).padStart(
-        nzfill,
-        "0"
-      )}`;
+      source.from_plate = `${source.plate}_${String(
+        source.plate_index
+      ).padStart(nzfill, "0")}`;
       source.from_well = source.plate_well;
     });
   });

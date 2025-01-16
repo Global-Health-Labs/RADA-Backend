@@ -1,0 +1,10 @@
+from_plate,from_well,source,volume_ul,plate,volume_well,nrow,ncol,volume_holdover,volume_usable,volume_user_input
+ivl_384_flat_v1_0001,1,CS031,24.0,ivl_384_flat_v1,90,16,24,40,50,64.0
+ivl_384_flat_v1_0001,3,CS034,24.0,ivl_384_flat_v1,90,16,24,40,50,64.0
+ivl_384_flat_v1_0001,17,D001-N1,24.0,ivl_384_flat_v1,90,16,24,40,50,64.0
+ivl_384_flat_v1_0001,19,D001-P1,24.0,ivl_384_flat_v1,90,16,24,40,50,64.0
+ivl_384_flat_v1_0001,21,D002-N1,24.0,ivl_384_flat_v1,90,16,24,40,50,64.0
+ivl_384_flat_v1_0001,23,D002-P1,24.0,ivl_384_flat_v1,90,16,24,40,50,64.0
+ivl_384_flat_v1_0001,25,D003-N1,24.0,ivl_384_flat_v1,90,16,24,40,50,64.0
+ivl_384_flat_v1_0001,27,D003-P1,24.0,ivl_384_flat_v1,90,16,24,40,50,64.0
+ivl_96_dw_v1_0001,1,camera,240.0,ivl_96_dw_v1,1000,8,12,60,940,300.0

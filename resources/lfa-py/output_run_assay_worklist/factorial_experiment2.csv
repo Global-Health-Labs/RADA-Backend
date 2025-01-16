@@ -1,0 +1,5 @@
+step,dx,dz,volume,liquid_class,time,source
+conjugate,13,0.2,1,water,-1,"CS031,CS033"
+sample,0,1.0,75,pbst,1200,"D004-N1,D004-P1,ABI-131-N1,ABI-131-P1"
+ding,4,0.7,75,pbst,1200,"A001-N1, A001-P1, A002-N1, A002-P1, A003-N1, A003-P1, Q007-N1, Q007-P1, Q004-N1, Q004-P1, ZBI-131-N1, ZBI-131-P1"
+imaging,24,0.0,0,imaging,600,camera

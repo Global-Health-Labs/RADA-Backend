@@ -79,7 +79,93 @@ export type WorklistWithDestination = {
 /**
  * Final worklist row with source assignment
  */
-export interface WorklistWithSrc extends WorklistWithDestination {
+export type WorklistWithSrc = {
   from_plate: string;
   from_well: number;
+} & WorklistWithDestination;
+
+/**
+ * Worklist row with target assignment
+ */
+export type WorklistWithTarget = {
+  target: string;
+  liquid_type: string;
+} & Omit<WorklistWithSrc, "step_index" | "destination">;
+
+export type SourceInfo = {
+  source: string;
+  volume_ul: number;
+  step_index: number;
+  step: string;
+  volume_usable?: number;
+  plate?: string;
+  plate_well?: number;
+  plate_index?: number;
+  from_plate?: string;
+  from_well?: number;
+  nrow?: number;
+  ncol?: number;
+};
+
+/**
+ * Plate info with well information
+ */
+export type PlateWellInfo = PlateInfo & {
+  plate_well: string;
+  plate_index?: string;
+};
+
+/**
+ * Worklist with plate well columns
+ */
+export type WorklistWithPlateWellColumns = WorklistWithSrc;
+
+/**
+ * Worklist with plate well columns and index
+ */
+export type WorklistWithIndex = WorklistWithPlateWellColumns & {
+  index: number;
+};
+
+/**
+ * Plate info with plate number
+ */
+export type PlateWithNumber = {
+  plate: string;
+  plate_number: number;
+  well_number: number;
+  from_plate_well?: string;
+  to_plate_well?: string;
+};
+
+/**
+ * Result of volume update operation
+ */
+export type VolumeUpdateResult = {
+  worklist: WorklistWithSrc;
+  hasChanges: boolean;
+};
+
+/**
+ * Solution user input information
+ */
+export interface SolutionUserInput {
+  solution: string;
+  plate_well: string;
+  user_input: number;
+}
+
+/**
+ * Volume information for plate wells
+ */
+export interface VolumeInfo {
+  plate_well: string;
+  vol_from: number;
+  vol_to: number;
+  volume_need: number;
+  plate_index: string;
+  well: string;
+  plate: string;
+  volume_holdover: number;
+  user_input: number;
 }
