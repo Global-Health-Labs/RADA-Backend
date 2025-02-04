@@ -38,6 +38,7 @@ pnpm-debug.log*
 *.swo
 .DS_Store
 Thumbs.db
+.windsurfrules
 
 # TypeScript cache
 *.tsbuildinfo
@@ -53,3 +54,7 @@ Thumbs.db
 *.tmp
 *.temp
 .cache/
+
+# Staging
+.env.staging
+us-east-2-bundle.pem
