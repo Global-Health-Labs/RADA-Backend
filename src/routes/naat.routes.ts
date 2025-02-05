@@ -1,16 +1,16 @@
-import { Router, Request, Response } from "express";
-import { eq, and, desc, asc, sql, ilike, or } from "drizzle-orm";
+import { and, eq, or, desc } from "drizzle-orm";
+import { Request, Response, Router } from "express";
+import { DISPENSE_TYPES } from "../constants";
 import { db } from "../db";
 import {
-  naatExperiments,
-  users,
+  deckLayouts,
+  naatLiquidTypes,
   masterMixes,
   masterMixRecipes,
-  liquidTypes,
-  deckLayouts,
+  naatExperiments,
+  users,
 } from "../db/schema";
 import { authenticateToken } from "../middleware/auth";
-import { DISPENSE_TYPES } from "../constants";
 
 const router = Router();
 // Helper function to fetch and format mastermixes
@@ -178,14 +178,17 @@ router.post(
 
       // Get current max order index
       const maxOrderIndex = await db
-        .select()
+        .select({
+          maxOrder: masterMixes.orderIndex,
+        })
         .from(masterMixes)
         .where(eq(masterMixes.experimentalPlanId, experimentId))
-        .max(masterMixes.orderIndex);
+        .orderBy(desc(masterMixes.orderIndex))
+        .limit(1);
 
-      const allLiquidTypes = await db.select().from(liquidTypes);
+      const allLiquidTypes = await db.select().from(naatLiquidTypes);
 
-      const newOrderIndex = (maxOrderIndex[0].max || 0) + 1;
+      const newOrderIndex = (maxOrderIndex[0]?.maxOrder || 0) + 1;
 
       // Create mastermix
       const newMastermix = await db
@@ -289,7 +292,7 @@ router.put(
       const { mastermixId } = req.params;
       const { nameOfMasterMix, recipes } = req.body;
 
-      const allLiquidTypes = await db.select().from(liquidTypes);
+      const allLiquidTypes = await db.select().from(naatLiquidTypes);
 
       const updatedMastermix = await db
         .update(masterMixes)
@@ -386,7 +389,7 @@ router.put("/:id/mastermix", async (req: Request, res: Response) => {
       .from(masterMixes)
       .where(eq(masterMixes.experimentalPlanId, experimentId));
 
-    const allLiquidTypes = await db.select().from(liquidTypes);
+    const allLiquidTypes = await db.select().from(naatLiquidTypes);
 
     // Find mastermixes to delete (those in DB but not in payload)
     const mastermixesToDelete = existingMastermixes.filter(

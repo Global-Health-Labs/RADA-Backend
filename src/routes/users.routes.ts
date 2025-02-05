@@ -107,7 +107,7 @@ router.get("/", async (req: Request, res: Response) => {
       .leftJoin(roles, eq(users.roleId, roles.id));
 
     res.json(usersWithRoles);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Get users with roles error:", error);
     res
       .status(500)
@@ -171,7 +171,7 @@ router.put("/:userId", async (req: Request, res: Response) => {
       .limit(1);
 
     res.json(updatedUser);
-  } catch (error) {
+  } catch (error: any) {
     console.error("Update user error:", error);
     res
       .status(500)
@@ -232,7 +232,7 @@ router.patch("/:userId/role", async (req: Request, res: Response) => {
       message: "Role updated successfully",
       user: updatedUser,
     });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Update user role error:", error);
     res
       .status(500)
