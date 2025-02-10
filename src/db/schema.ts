@@ -69,17 +69,15 @@ export const naatExperiments = pgTable("experimental_plan", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-export const documents = pgTable("document", {
+export const experimentFiles = pgTable("experiment_file", {
   id: uuid("id").defaultRandom().primaryKey(),
-  experimentPlanId: uuid("experiment_plan_id").references(
-    () => naatExperiments.id
-  ),
-  originalFileName: varchar("original_file_name", { length: 255 }).notNull(),
-  secureFileName: varchar("secure_file_name", { length: 255 }).notNull(),
-  s3Url: varchar("s3_url", { length: 255 }).notNull(),
-  contentType: varchar("content_type", { length: 50 }),
+  experimentId: uuid("experiment_id").notNull(),
+  experimentType: text("experiment_type", { enum: ["NAAT", "LFA"] }).notNull(),
+  fileName: varchar("file_name", { length: 255 }).notNull(),
+  s3Key: varchar("s3_key", { length: 512 }).notNull(),
+  contentType: varchar("content_type", { length: 100 }),
   fileSize: integer("file_size"),
-  fileHash: varchar("file_hash", { length: 64 }),
+  uploadedBy: uuid("uploaded_by").references(() => users.id).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -256,16 +254,9 @@ export const experimentalPlansRelations = relations(
       references: [deckLayouts.id],
     }),
     masterMixes: many(masterMixes),
-    documents: many(documents),
+    files: many(experimentFiles, { relationName: "naatExperimentFiles" }),
   })
 );
-
-export const documentsRelations = relations(documents, ({ one }) => ({
-  experimentalPlan: one(naatExperiments, {
-    fields: [documents.experimentPlanId],
-    references: [naatExperiments.id],
-  }),
-}));
 
 export const deckLayoutsRelations = relations(deckLayouts, ({ one }) => ({
   creator: one(users, {
@@ -297,6 +288,7 @@ export const lfaExperimentsRelations = relations(
       fields: [lfaExperiments.ownerId],
       references: [users.id],
     }),
+    files: many(experimentFiles, { relationName: "lfaExperimentFiles" }),
   })
 );
 
@@ -304,5 +296,22 @@ export const lfaStepsRelations = relations(lfaSteps, ({ one }) => ({
   experiment: one(lfaExperiments, {
     fields: [lfaSteps.experimentId],
     references: [lfaExperiments.id],
+  }),
+}));
+
+export const experimentFilesRelations = relations(experimentFiles, ({ one }) => ({
+  naatExperiment: one(naatExperiments, {
+    fields: [experimentFiles.experimentId],
+    references: [naatExperiments.id],
+    relationName: "naatExperimentFiles",
+  }),
+  lfaExperiment: one(lfaExperiments, {
+    fields: [experimentFiles.experimentId],
+    references: [lfaExperiments.id],
+    relationName: "lfaExperimentFiles",
+  }),
+  uploader: one(users, {
+    fields: [experimentFiles.uploadedBy],
+    references: [users.id],
   }),
 }));

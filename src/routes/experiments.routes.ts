@@ -3,6 +3,13 @@ import { Request, Response, Router } from "express";
 import { db } from "../db";
 import { lfaExperiments, naatExperiments, users } from "../db/schema";
 import { authenticateToken } from "../middleware/auth";
+import {
+  getPresignedUrl,
+  saveFileMetadata,
+  getExperimentFiles,
+  deleteFile,
+  getFileDownloadUrl,
+} from "../controllers/files.controller";
 
 const router = Router();
 
@@ -207,5 +214,36 @@ router.get("/", authenticateToken, async (req: Request, res: Response) => {
       .json({ message: "Failed to fetch experiments", error: error.message });
   }
 });
+
+// File operations
+router.post(
+  "/:experimentId/files/presign",
+  authenticateToken,
+  getPresignedUrl
+);
+
+router.post(
+  "/:experimentId/files",
+  authenticateToken,
+  saveFileMetadata
+);
+
+router.get(
+  "/:experimentId/files",
+  authenticateToken,
+  getExperimentFiles
+);
+
+router.get(
+  "/:experimentId/files/:fileId/download",
+  authenticateToken,
+  getFileDownloadUrl
+);
+
+router.delete(
+  "/:experimentId/files/:fileId",
+  authenticateToken,
+  deleteFile
+);
 
 export default router;

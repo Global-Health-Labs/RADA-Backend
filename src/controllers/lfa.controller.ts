@@ -47,6 +47,11 @@ async function getExperimentWithAccess(experimentId: string, userId: string) {
       steps: {
         orderBy: (steps, { asc }) => [asc(steps.orderIndex)],
       },
+      owner: {
+        columns: {
+          fullname: true,
+        },
+      },
     },
   });
 
@@ -68,7 +73,13 @@ async function getExperimentWithAccess(experimentId: string, userId: string) {
     }
   }
 
-  return experiment;
+  const { owner, ...experimentWithoutOwner } = experiment;
+
+  return {
+    ...experimentWithoutOwner,
+    ownerFullName: owner?.fullname,
+    type: "LFA",
+  };
 }
 
 export async function createLFAExperiment(req: Request, res: Response) {

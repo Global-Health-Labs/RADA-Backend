@@ -56,7 +56,6 @@ const config = {
     region: parsedEnv.AWS_REGION,
     accessKeyId: parsedEnv.AWS_ACCESS_KEY_ID,
     secretAccessKey: parsedEnv.AWS_SECRET_ACCESS_KEY,
-    bucketName: parsedEnv.BUCKET_NAME,
     documentsBucketName: parsedEnv.DOCUMENTS_BUCKET_NAME,
   },
   smtp: {
