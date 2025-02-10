@@ -1,23 +1,25 @@
 import { spawn } from "child_process";
 import csvParser from "csv-parser";
 import { createObjectCsvWriter } from "csv-writer";
-import { and, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { Request, Response } from "express";
 import * as fs from "fs";
+import { camelCase, omit } from "lodash";
 import * as path from "path";
 import { db } from "../db";
 import {
   assayPlateConfigs,
+  lfaDeckLayouts,
   lfaExperiments,
   lfaSteps,
-  reagentPlates,
   users,
 } from "../db/schema";
 import { ExportQueue } from "../utils/ExportQueue";
-import { camelCase, omit } from "lodash";
 
-type LFAExperimentWithPlateConfig = typeof lfaExperiments.$inferSelect & {
-  plateConfig: typeof assayPlateConfigs.$inferSelect;
+type LFAExperimentWithDeckLayout = typeof lfaExperiments.$inferSelect & {
+  deckLayout: typeof lfaDeckLayouts.$inferSelect & {
+    assayPlateConfig: typeof assayPlateConfigs.$inferSelect;
+  };
   steps: (typeof lfaSteps.$inferSelect)[];
 };
 
@@ -37,7 +39,11 @@ async function getExperimentWithAccess(experimentId: string, userId: string) {
   const experiment = await db.query.lfaExperiments.findFirst({
     where: eq(lfaExperiments.id, experimentId),
     with: {
-      plateConfig: true,
+      deckLayout: {
+        with: {
+          assayPlateConfig: true,
+        },
+      },
       steps: {
         orderBy: (steps, { asc }) => [asc(steps.orderIndex)],
       },
@@ -68,19 +74,23 @@ async function getExperimentWithAccess(experimentId: string, userId: string) {
 export async function createLFAExperiment(req: Request, res: Response) {
   try {
     const userId = req.user?.id;
+
     if (!userId) {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
-    const { name, numReplicates, plateConfigId } = req.body;
+    const { name, numReplicates, deckLayoutId } = req.body;
 
-    // Validate plate config exists
-    const plateConfig = await db.query.assayPlateConfigs.findFirst({
-      where: eq(assayPlateConfigs.id, plateConfigId),
+    // Validate deck layout exists
+    const deckLayout = await db.query.lfaDeckLayouts.findFirst({
+      where: eq(lfaDeckLayouts.id, deckLayoutId),
+      with: {
+        assayPlateConfig: true,
+      },
     });
 
-    if (!plateConfig) {
-      return res.status(404).json({ error: "Plate configuration not found" });
+    if (!deckLayout) {
+      return res.status(404).json({ error: "Deck Layout not found" });
     }
 
     // Create new LFA experiment
@@ -89,12 +99,12 @@ export async function createLFAExperiment(req: Request, res: Response) {
       .values({
         name,
         numReplicates,
-        plateConfigId,
+        deckLayoutId,
         ownerId: userId,
       })
       .returning();
 
-    res.status(201).json(experiment);
+    return res.json(experiment);
   } catch (error) {
     console.error("Error creating LFA experiment:", error);
     res.status(500).json({ error: "Failed to create LFA experiment" });
@@ -125,25 +135,24 @@ export async function updateLFAExperiment(req: Request, res: Response) {
     delete updateData.id; // Remove id from update data
     delete updateData.ownerId; // Prevent owner change
 
-    // If plateConfigId is being updated, validate it exists
-    if (updateData.plateConfigId) {
-      const plateConfig = await db.query.assayPlateConfigs.findFirst({
-        where: eq(assayPlateConfigs.id, updateData.plateConfigId),
+    // If deckLayoutId is being updated, validate it exists
+    if (updateData.deckLayoutId) {
+      const deckLayout = await db.query.lfaDeckLayouts.findFirst({
+        where: eq(lfaDeckLayouts.id, updateData.deckLayoutId),
       });
 
-      if (!plateConfig) {
-        return res.status(404).json({ error: "Plate configuration not found" });
+      if (!deckLayout) {
+        return res.status(404).json({ error: "Deck layout not found" });
       }
     }
 
-    console.log(updateData);
     // Update the experiment
     const [updated] = await db
       .update(lfaExperiments)
       .set({
         name: updateData.name,
         numReplicates: updateData.numReplicates,
-        plateConfigId: updateData.plateConfigId,
+        deckLayoutId: updateData.deckLayoutId,
         updatedAt: new Date(),
       })
       .where(eq(lfaExperiments.id, experimentId))
@@ -230,7 +239,7 @@ export const getExperiment = async (req: Request, res: Response) => {
 };
 
 async function writeExperimentSteps(
-  experiment: LFAExperimentWithPlateConfig,
+  experiment: LFAExperimentWithDeckLayout,
   workingDirectory: string
 ) {
   const experimentStepsPath = path.join(
@@ -292,7 +301,7 @@ async function writeReagentPlatesCSV(workingDirectory: string) {
 }
 
 async function updateInputMasterFile(
-  experiment: LFAExperimentWithPlateConfig,
+  experiment: LFAExperimentWithDeckLayout,
   workingDirectory: string
 ) {
   const inputMasterPath = path.join(workingDirectory, "input_master.csv");
@@ -309,16 +318,17 @@ async function updateInputMasterFile(
 
   // Update values based on plate config
   const updatedRows = rows.map((row) => {
+    const plateConfig = experiment.deckLayout.assayPlateConfig;
     switch (row.key) {
       case "nplate":
-        return { ...row, value: experiment.plateConfig.numPlates.toString() };
+        return { ...row, value: plateConfig.numPlates.toString() };
       case "nperplate":
         return {
           ...row,
-          value: experiment.plateConfig.numStrips.toString(),
+          value: plateConfig.numRows.toString(),
         };
       case "ncol":
-        return { ...row, value: experiment.plateConfig.numColumns.toString() };
+        return { ...row, value: plateConfig.numColumns.toString() };
       case "nrep":
         return { ...row, value: experiment.numReplicates.toString() };
       default:
@@ -342,7 +352,7 @@ async function updateInputMasterFile(
   await csvWriter.writeRecords(updatedRows);
 }
 
-async function executePythonScript(experiment: LFAExperimentWithPlateConfig) {
+async function executePythonScript(experiment: LFAExperimentWithDeckLayout) {
   const pythonScriptPath = path.join(
     __dirname,
     "../../resources/lfa-py/main.py"
@@ -535,7 +545,7 @@ export async function cloneLFAExperiment(req: Request, res: Response) {
         .values({
           name: `${originalExperiment.name} (Copy)`,
           numReplicates: originalExperiment.numReplicates,
-          plateConfigId: originalExperiment.plateConfigId,
+          deckLayoutId: originalExperiment.deckLayoutId,
           ownerId: userId,
         })
         .returning();
@@ -560,5 +570,25 @@ export async function cloneLFAExperiment(req: Request, res: Response) {
   } catch (error) {
     console.error("Error cloning LFA experiment:", error);
     res.status(500).json({ error: "Failed to clone LFA experiment" });
+  }
+}
+
+export async function getLFADeckLayouts(req: Request, res: Response) {
+  try {
+    const layouts = await db.query.lfaDeckLayouts.findMany({
+      with: {
+        assayPlateConfig: true,
+        creator: {
+          columns: {
+            fullname: true,
+          },
+        },
+      },
+      orderBy: (layouts, { desc }) => [desc(layouts.createdAt)],
+    });
+    res.json(layouts);
+  } catch (error) {
+    console.error("Error fetching LFA deck layouts:", error);
+    res.status(500).json({ message: "Failed to fetch deck layouts" });
   }
 }

@@ -13,6 +13,10 @@ import {
   createReagentPlate,
   updateReagentPlate,
   deleteReagentPlate,
+  getLFADeckLayouts,
+  createLFADeckLayout,
+  updateLFADeckLayout,
+  deleteLFADeckLayout,
 } from "../controllers/lfa-settings.controller";
 
 const router = Router();
@@ -28,8 +32,9 @@ const configSchema = z.object({
   description: z.string(),
   assayPlatePrefix: z.string().min(1, "Plate prefix is required"),
   numPlates: z.number().min(1, "Must have at least 1 plate"),
-  numStrips: z.number().min(1, "Must have at least 1 strip"),
+  numRows: z.number().min(1, "Must have at least 1 row"),
   numColumns: z.number().min(1, "Must have at least 1 column"),
+  deviceType: z.enum(["Strip", "Cassette"]),
   locations: z
     .array(locationSchema)
     .min(1, "At least one location is required"),
@@ -46,6 +51,22 @@ const reagentPlateSchema = z.object({
   numRows: z.number().min(1, "Must have at least 1 row"),
   numCols: z.number().min(1, "Must have at least 1 column"),
   volumeHoldover: z.number().min(0, "Holdover volume must be non-negative"),
+});
+
+const deckLayoutSchema = z.object({
+  name: z.string().min(1, "Name is required"),
+  description: z.string().optional(),
+  platePositions: z.array(
+    z.object({
+      id: z.string(),
+      name: z.string(),
+      isEmpty: z.boolean().optional(),
+      wellCount: z.number(),
+      plateDescriptor: z.string(),
+      sequenceNumber: z.string(),
+    })
+  ),
+  assayPlateConfigId: z.string().uuid("Invalid assay plate config ID"),
 });
 
 // Get all configurations
@@ -198,6 +219,38 @@ router.delete("/liquid-types/:id", async (req, res) => {
     res.status(500).json({ message: "Failed to delete LFA liquid type" });
   }
 });
+
+// Deck Layout Routes
+router.get("/deck-layouts", getLFADeckLayouts);
+
+router.post(
+  "/deck-layouts",
+  validateRequest({
+    body: deckLayoutSchema,
+  }),
+  createLFADeckLayout
+);
+
+router.patch(
+  "/deck-layouts/:id",
+  validateRequest({
+    body: deckLayoutSchema.partial(),
+    params: z.object({
+      id: z.string().uuid("Invalid layout ID"),
+    }),
+  }),
+  updateLFADeckLayout
+);
+
+router.delete(
+  "/deck-layouts/:id",
+  validateRequest({
+    params: z.object({
+      id: z.string().uuid("Invalid layout ID"),
+    }),
+  }),
+  deleteLFADeckLayout
+);
 
 // Reagent Plates Routes
 

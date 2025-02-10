@@ -1,0 +1,1 @@
+ALTER TABLE "assay_plate_config" ADD COLUMN "device_type" varchar(20) DEFAULT 'Strip' NOT NULL;

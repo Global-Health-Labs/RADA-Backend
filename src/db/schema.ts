@@ -137,8 +137,8 @@ export const lfaExperiments = pgTable("lfa_experiment", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: varchar("name", { length: 100 }).notNull(),
   numReplicates: integer("num_replicates").notNull(),
-  plateConfigId: uuid("plate_config_id")
-    .references(() => assayPlateConfigs.id)
+  deckLayoutId: uuid("deck_layout_id")
+    .references(() => lfaDeckLayouts.id)
     .notNull(),
   ownerId: uuid("owner_id")
     .references(() => users.id)
@@ -172,8 +172,12 @@ export const assayPlateConfigs = pgTable("assay_plate_config", {
   name: varchar("name", { length: 100 }).notNull(),
   description: text("description"),
   assayPlatePrefix: varchar("assay_plate_prefix", { length: 50 }).notNull(),
+  deviceType: varchar("device_type", { length: 20 })
+    .notNull()
+    .$type<"Strip" | "Cassette">()
+    .default("Strip"),
   numPlates: integer("num_plates").notNull(),
-  numStrips: integer("num_strips").notNull(),
+  numRows: integer("num_rows").notNull(),
   numColumns: integer("num_columns").notNull(),
   locations: jsonb("locations").notNull().$type<PlateLocation[]>(),
   createdAt: timestamp("created_at").defaultNow(),
@@ -190,6 +194,28 @@ export const reagentPlates = pgTable("lfa_reagent_plate", {
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
   lastUpdatedBy: uuid("last_updated_by").references(() => users.id),
+});
+
+export const lfaDeckLayouts = pgTable("lfa_deck_layout", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  name: varchar("name", { length: 255 }).notNull().unique(),
+  description: text("description"),
+  platePositions: jsonb("plate_positions").notNull().$type<
+    Array<{
+      id: string;
+      name: string;
+      isEmpty?: boolean;
+      wellCount: number;
+      plateDescriptor: string;
+      sequenceNumber: string;
+    }>
+  >(),
+  assayPlateConfigId: uuid("assay_plate_config_id")
+    .notNull()
+    .references(() => assayPlateConfigs.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  createdBy: uuid("created_by").references(() => users.id),
 });
 
 // Relations
@@ -248,18 +274,29 @@ export const deckLayoutsRelations = relations(deckLayouts, ({ one }) => ({
   }),
 }));
 
+export const lfaDeckLayoutRelations = relations(lfaDeckLayouts, ({ one }) => ({
+  assayPlateConfig: one(assayPlateConfigs, {
+    fields: [lfaDeckLayouts.assayPlateConfigId],
+    references: [assayPlateConfigs.id],
+  }),
+  creator: one(users, {
+    fields: [lfaDeckLayouts.createdBy],
+    references: [users.id],
+  }),
+}));
+
 export const lfaExperimentsRelations = relations(
   lfaExperiments,
   ({ one, many }) => ({
+    deckLayout: one(lfaDeckLayouts, {
+      fields: [lfaExperiments.deckLayoutId],
+      references: [lfaDeckLayouts.id],
+    }),
+    steps: many(lfaSteps),
     owner: one(users, {
       fields: [lfaExperiments.ownerId],
       references: [users.id],
     }),
-    plateConfig: one(assayPlateConfigs, {
-      fields: [lfaExperiments.plateConfigId],
-      references: [assayPlateConfigs.id],
-    }),
-    steps: many(lfaSteps),
   })
 );
 

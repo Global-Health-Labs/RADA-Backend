@@ -1,0 +1,1 @@
+ALTER TABLE "assay_plate_config" RENAME COLUMN "num_strips" TO "num_rows";

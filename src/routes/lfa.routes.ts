@@ -8,13 +8,18 @@ import {
   exportExperiment,
   getExperimentInstructions,
   cloneLFAExperiment,
+  getLFADeckLayouts,
 } from "../controllers/lfa.controller";
 import { authenticateToken } from "../middleware/auth";
+import { db } from "../db";
 
 const router = Router();
 
 // Create new LFA experiment
 router.post("/", authenticateToken, createLFAExperiment);
+
+// Get deck layouts
+router.get("/deck-layouts", authenticateToken, getLFADeckLayouts);
 
 // update experiment
 router.put("/:id", authenticateToken, updateLFAExperiment);
