@@ -15,7 +15,7 @@ const pool = new Pool({
   connectionString: config.DATABASE_URL,
   ssl: config.db.useSSL
     ? {
-        rejectUnauthorized: true, // Enforce SSL validation
+        rejectUnauthorized: false, // Enforce SSL validation
         ca: sslCert, // Use the AWS RDS CA certificate
         checkServerIdentity: (host, cert) => {
           console.log("Certificate check:", host, cert);
