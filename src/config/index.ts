@@ -33,7 +33,6 @@ const envSchema = z.object({
   DOMAIN_NAME: z.string(),
   FRONTEND_SUBDOMAIN: z.string(),
   CLOUDFRONT_DOMAIN_NAME: z.string(),
-  API_DOMAIN: z.string(),
   USE_HTTPS: z.string().optional(),
 
   // SMTP Configuration
@@ -76,7 +75,7 @@ const config = {
   },
   ssl: {
     enabled: parsedEnv.USE_HTTPS?.trim()?.toLowerCase() === "true",
-    certPath: `/etc/letsencrypt/live/${parsedEnv.API_DOMAIN}`,
+    certPath: `/etc/letsencrypt/live/${parsedEnv.DOMAIN_NAME}`,
   },
   frontendUrl: parsedEnv.FRONTEND_URL,
 };
