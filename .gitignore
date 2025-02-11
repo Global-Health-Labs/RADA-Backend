@@ -57,4 +57,4 @@ Thumbs.db
 
 # Staging
 .env.staging
-us-east-2-bundle.pem
+*.pem
