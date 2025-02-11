@@ -84,9 +84,9 @@ export const experimentFiles = pgTable("experiment_file", {
 
 export const naatLiquidTypes = pgTable("naat_liquid_type", {
   id: uuid("id").defaultRandom().primaryKey(),
-  displayName: varchar("display_name", { length: 100 }).notNull(),
   value: varchar("value", { length: 100 }).notNull().unique(),
-  needsTipWashing: boolean("needs_tip_washing").notNull().default(true),
+  displayName: varchar("display_name", { length: 100 }).notNull(),
+  needsTipWashing: boolean("needs_tip_washing").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
   lastUpdatedBy: uuid("last_updated_by")

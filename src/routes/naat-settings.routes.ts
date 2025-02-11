@@ -16,6 +16,7 @@ const router = Router();
 const liquidTypeSchema = z.object({
   value: z.string().min(1),
   displayName: z.string().min(1),
+  needsTipWashing: z.boolean(),
 });
 
 const volumeUnitSchema = z.object({
@@ -34,7 +35,7 @@ router.get("/liquid-types", async (req, res) => {
 // POST /settings/naat/liquid-types
 router.post("/liquid-types", async (req, res) => {
   try {
-    const { value, displayName } = liquidTypeSchema.parse(req.body);
+    const { value, displayName, needsTipWashing } = liquidTypeSchema.parse(req.body);
 
     // Check if value already exists
     const existing = await db
@@ -54,6 +55,7 @@ router.post("/liquid-types", async (req, res) => {
       .values({
         value,
         displayName,
+        needsTipWashing,
         lastUpdatedBy: req.user!.id,
       })
       .returning();
@@ -93,19 +95,18 @@ router.post("/liquid-types", async (req, res) => {
 router.put("/liquid-types/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const { value, displayName } = liquidTypeSchema.parse(req.body);
+    const { value, displayName, needsTipWashing } = liquidTypeSchema.parse(req.body);
 
     // Check if value already exists for a different ID
     const existing = await db
       .select()
       .from(naatLiquidTypes)
-      .where(eq(naatLiquidTypes.value, value))
-      .limit(1);
+      .where(eq(naatLiquidTypes.value, value));
 
     if (existing.length > 0 && existing[0].id !== id) {
       return res
-        .status(400)
-        .json({ message: "Liquid type with this value already exists" });
+        .status(409)
+        .json({ message: "A liquid type with this value already exists" });
     }
 
     const [updatedType] = await db
@@ -113,6 +114,8 @@ router.put("/liquid-types/:id", async (req, res) => {
       .set({
         value,
         displayName,
+        needsTipWashing,
+        updatedAt: new Date(),
         lastUpdatedBy: req.user!.id,
       })
       .where(eq(naatLiquidTypes.id, id))
@@ -134,29 +137,6 @@ router.put("/liquid-types/:id", async (req, res) => {
       });
     }
 
-    // Check if error message indicates a unique constraint violation
-    if (
-      error.message?.toLowerCase().includes("unique") ||
-      error.message?.toLowerCase().includes("duplicate") ||
-      error.message?.toLowerCase().includes("violation")
-    ) {
-      return res.status(409).json({
-        message: "A liquid type with this value already exists",
-        error: error.message,
-      });
-    }
-
-    // Check for invalid ID format
-    if (
-      error.message?.toLowerCase().includes("invalid") &&
-      error.message?.toLowerCase().includes("id")
-    ) {
-      return res.status(400).json({
-        message: "Invalid liquid type ID format",
-        error: error.message,
-      });
-    }
-
     res.status(500).json({
       message: "Failed to update liquid type",
       error: error.message,
@@ -166,21 +146,28 @@ router.put("/liquid-types/:id", async (req, res) => {
 
 // DELETE /settings/naat/liquid-types/:id
 router.delete("/liquid-types/:id", async (req, res) => {
-  const { id } = req.params;
+  try {
+    const { id } = req.params;
 
-  const [deletedType] = await db
-    .delete(naatLiquidTypes)
-    .where(eq(naatLiquidTypes.id, id))
-    .returning();
+    const [deletedType] = await db
+      .delete(naatLiquidTypes)
+      .where(eq(naatLiquidTypes.id, id))
+      .returning();
 
-  if (!deletedType) {
-    return res.status(404).json({ message: "Liquid type not found" });
+    if (!deletedType) {
+      return res.status(404).json({ message: "Liquid type not found" });
+    }
+
+    res.json(deletedType);
+  } catch (error: any) {
+    console.error("Error deleting liquid type:", error);
+    res.status(500).json({
+      message: "Failed to delete liquid type",
+      error: error.message,
+    });
   }
-
-  res.json(deletedType);
 });
 
-// Volume Units Endpoints
 // GET /settings/naat/volume-units
 router.get("/volume-units", async (req, res) => {
   const units = await db.select().from(volumeUnits).orderBy(volumeUnits.unit);
@@ -200,7 +187,9 @@ router.post("/volume-units", async (req, res) => {
       .limit(1);
 
     if (existing.length > 0) {
-      return res.status(400).json({ message: "Volume unit already exists" });
+      return res
+        .status(409)
+        .json({ message: "Volume unit with this value already exists" });
     }
 
     const [newUnit] = await db
@@ -212,29 +201,40 @@ router.post("/volume-units", async (req, res) => {
       .returning();
 
     res.status(201).json(newUnit);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json({ message: error.errors[0].message });
+  } catch (error: any) {
+    console.error("Error creating volume unit:", error);
+
+    // Check for validation errors from Zod
+    if (error.name === "ZodError") {
+      return res.status(400).json({
+        message: "Invalid input data",
+        error: error.errors,
+      });
     }
-    res.status(500).json({ message: "Internal server error" });
+
+    res.status(500).json({
+      message: "Failed to create volume unit",
+      error: error.message,
+    });
   }
 });
 
 // PUT /settings/naat/volume-units/:id
 router.put("/volume-units/:id", async (req, res) => {
   try {
-    const { unit } = volumeUnitSchema.parse(req.body);
     const { id } = req.params;
+    const { unit } = volumeUnitSchema.parse(req.body);
 
-    // Check if unit already exists for other records
+    // Check if unit already exists for a different ID
     const existing = await db
       .select()
       .from(volumeUnits)
-      .where(eq(volumeUnits.unit, unit))
-      .limit(1);
+      .where(eq(volumeUnits.unit, unit));
 
     if (existing.length > 0 && existing[0].id !== id) {
-      return res.status(400).json({ message: "Volume unit already exists" });
+      return res
+        .status(409)
+        .json({ message: "A volume unit with this value already exists" });
     }
 
     const [updatedUnit] = await db
@@ -252,11 +252,21 @@ router.put("/volume-units/:id", async (req, res) => {
     }
 
     res.json(updatedUnit);
-  } catch (error) {
-    if (error instanceof z.ZodError) {
-      return res.status(400).json({ message: error.errors[0].message });
+  } catch (error: any) {
+    console.error("Error updating volume unit:", error);
+
+    // Check for validation errors from Zod
+    if (error.name === "ZodError") {
+      return res.status(400).json({
+        message: "Invalid input data",
+        error: error.errors,
+      });
     }
-    res.status(500).json({ message: "Internal server error" });
+
+    res.status(500).json({
+      message: "Failed to update volume unit",
+      error: error.message,
+    });
   }
 });
 
@@ -275,8 +285,12 @@ router.delete("/volume-units/:id", async (req, res) => {
     }
 
     res.json(deletedUnit);
-  } catch (error) {
-    res.status(500).json({ message: "Internal server error" });
+  } catch (error: any) {
+    console.error("Error deleting volume unit:", error);
+    res.status(500).json({
+      message: "Failed to delete volume unit",
+      error: error.message,
+    });
   }
 });
 
