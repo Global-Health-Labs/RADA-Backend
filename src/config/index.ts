@@ -13,6 +13,7 @@ for (const k in envConfig) {
 const envSchema = z.object({
   // Database
   DATABASE_URL: z.string(),
+  DB_USE_SSL: z.string(),
 
   // JWT
   JWT_SECRET_KEY: z.string(),
@@ -51,6 +52,10 @@ const parsedEnv = envSchema.parse(process.env);
 const config = {
   ...parsedEnv,
   PORT: process.env.PORT ? Number(process.env.PORT) : parsedEnv.PORT,
+  db: {
+    url: parsedEnv.DATABASE_URL,
+    useSSL: parsedEnv.DB_USE_SSL?.trim()?.toLowerCase() === "true",
+  },
   aws: {
     region: parsedEnv.AWS_REGION,
     accessKeyId: parsedEnv.AWS_ACCESS_KEY_ID,

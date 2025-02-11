@@ -1,19 +1,20 @@
-import type { Config } from 'drizzle-kit';
-import path from 'path';
-import * as dotenv from 'dotenv';
+import type { Config } from "drizzle-kit";
+import path from "path";
+import * as dotenv from "dotenv";
 
 // Load environment variables from .env file
-dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+dotenv.config({ path: path.resolve(process.cwd(), ".env") });
 
 if (!process.env.DATABASE_URL) {
-  throw new Error('DATABASE_URL environment variable is required');
+  throw new Error("DATABASE_URL environment variable is required");
 }
 
 export default {
-  schema: './src/db/schema.ts',
-  out: './drizzle',
-  driver: 'pg',
+  schema: "./src/db/schema.ts",
+  out: "./drizzle",
+  driver: "pg",
   dbCredentials: {
     connectionString: process.env.DATABASE_URL,
+    ssl: process.env.DB_USE_SSL === "true",
   },
 } satisfies Config;
