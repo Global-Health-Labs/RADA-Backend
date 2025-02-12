@@ -102,6 +102,7 @@ router.get("/", async (req: Request, res: Response) => {
         role: roles.name,
         role_updated_at: users.roleUpdatedAt,
         status: users.status,
+        confirmed: users.confirmed,
       })
       .from(users)
       .leftJoin(roles, eq(users.roleId, roles.id));
@@ -164,6 +165,7 @@ router.put("/:userId", async (req: Request, res: Response) => {
         fullname: users.fullname,
         email: users.email,
         role: roles.name,
+        confirmed: users.confirmed,
       })
       .from(users)
       .leftJoin(roles, eq(users.roleId, roles.id))
@@ -256,6 +258,58 @@ router.put("/:id/status", async (req: Request, res: Response) => {
   } catch (error) {
     console.error("Error updating user status:", error);
     res.status(500).json({ message: "Failed to update user status" });
+  }
+});
+
+// Resend invitation
+router.post("/:id/resend-invitation", async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+
+    // Get user
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, id))
+      .limit(1);
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    if (user.confirmed) {
+      return res.status(400).json({ message: "User is already confirmed" });
+    }
+
+    // Generate new temporary password
+    const tempPassword = generateTemporaryPassword();
+    const hashedPassword = await hashPassword(tempPassword);
+    console.log("Temp password:", tempPassword);
+
+    // Update user's password
+    await db
+      .update(users)
+      .set({ password: hashedPassword })
+      .where(eq(users.id, id));
+
+    // Generate and send invitation email
+    const emailHtml = generateInvitationEmail(
+      user.fullname,
+      user.email,
+      tempPassword
+    );
+    await sendEmail(
+      user.email,
+      "Welcome to RADA - Your Account Details",
+      emailHtml
+    );
+
+    res.json({ message: "Invitation resent successfully" });
+  } catch (error: any) {
+    console.error("Resend invitation error:", error);
+    res
+      .status(500)
+      .json({ message: "Failed to resend invitation", error: error.message });
   }
 });
 
