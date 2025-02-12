@@ -284,7 +284,6 @@ router.post("/:id/resend-invitation", async (req: Request, res: Response) => {
     // Generate new temporary password
     const tempPassword = generateTemporaryPassword();
     const hashedPassword = await hashPassword(tempPassword);
-    console.log("Temp password:", tempPassword);
 
     // Update user's password
     await db
