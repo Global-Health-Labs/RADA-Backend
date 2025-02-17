@@ -1,15 +1,15 @@
+import { relations } from "drizzle-orm";
 import {
+  boolean,
+  integer,
+  jsonb,
   pgTable,
+  real,
+  text,
+  timestamp,
   uuid,
   varchar,
-  boolean,
-  timestamp,
-  integer,
-  text,
-  real,
-  jsonb,
 } from "drizzle-orm/pg-core";
-import { relations } from "drizzle-orm";
 
 export const users = pgTable("user", {
   id: uuid("id").defaultRandom().primaryKey(),
@@ -77,7 +77,9 @@ export const experimentFiles = pgTable("experiment_file", {
   s3Key: varchar("s3_key", { length: 512 }).notNull(),
   contentType: varchar("content_type", { length: 100 }),
   fileSize: integer("file_size"),
-  uploadedBy: uuid("uploaded_by").references(() => users.id).notNull(),
+  uploadedBy: uuid("uploaded_by")
+    .references(() => users.id)
+    .notNull(),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -216,6 +218,14 @@ export const lfaDeckLayouts = pgTable("lfa_deck_layout", {
   createdBy: uuid("created_by").references(() => users.id),
 });
 
+export const naatPresets = pgTable("naat_preset", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  experimentId: uuid("experiment_id").references(() => naatExperiments.id),
+  updatedBy: uuid("updated_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ one }) => ({
   role: one(roles, {
@@ -253,10 +263,21 @@ export const experimentalPlansRelations = relations(
       fields: [naatExperiments.deckLayoutId],
       references: [deckLayouts.id],
     }),
+    preset: one(naatPresets, {
+      fields: [naatExperiments.id],
+      references: [naatPresets.experimentId],
+    }),
     masterMixes: many(masterMixes),
     files: many(experimentFiles, { relationName: "naatExperimentFiles" }),
   })
 );
+
+export const naatPresetsRelations = relations(naatPresets, ({ one }) => ({
+  experiment: one(naatExperiments, {
+    fields: [naatPresets.experimentId],
+    references: [naatExperiments.id],
+  }),
+}));
 
 export const deckLayoutsRelations = relations(deckLayouts, ({ one }) => ({
   creator: one(users, {
@@ -299,19 +320,22 @@ export const lfaStepsRelations = relations(lfaSteps, ({ one }) => ({
   }),
 }));
 
-export const experimentFilesRelations = relations(experimentFiles, ({ one }) => ({
-  naatExperiment: one(naatExperiments, {
-    fields: [experimentFiles.experimentId],
-    references: [naatExperiments.id],
-    relationName: "naatExperimentFiles",
-  }),
-  lfaExperiment: one(lfaExperiments, {
-    fields: [experimentFiles.experimentId],
-    references: [lfaExperiments.id],
-    relationName: "lfaExperimentFiles",
-  }),
-  uploader: one(users, {
-    fields: [experimentFiles.uploadedBy],
-    references: [users.id],
-  }),
-}));
+export const experimentFilesRelations = relations(
+  experimentFiles,
+  ({ one }) => ({
+    naatExperiment: one(naatExperiments, {
+      fields: [experimentFiles.experimentId],
+      references: [naatExperiments.id],
+      relationName: "naatExperimentFiles",
+    }),
+    lfaExperiment: one(lfaExperiments, {
+      fields: [experimentFiles.experimentId],
+      references: [lfaExperiments.id],
+      relationName: "lfaExperimentFiles",
+    }),
+    uploader: one(users, {
+      fields: [experimentFiles.uploadedBy],
+      references: [users.id],
+    }),
+  })
+);

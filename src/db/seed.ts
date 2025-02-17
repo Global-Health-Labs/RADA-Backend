@@ -1,5 +1,12 @@
 import { db } from "./index";
-import { roles, users, naatExperiments } from "./schema";
+import {
+  roles,
+  users,
+  naatExperiments,
+  naatPresets,
+  masterMixes,
+  masterMixRecipes,
+} from "./schema";
 import { hashPassword } from "../utils/auth";
 import { v4 as uuidv4 } from "uuid";
 import { faker } from "@faker-js/faker";
@@ -8,6 +15,7 @@ import { seedLiquidTypes as seedNAATLiquidTypes } from "./seeds/naat-liquid-type
 import { seedVolumeUnits as seedNAATVolumeUnits } from "./seeds/naat-volume-units";
 import { seedReagentPlates } from "./seeds/lfa-reagent-plates";
 import { seedLFALiquidTypes } from "./seeds/lfa-liquid-types";
+import { NAAT_PRESETS } from "./seeds/naat-presets";
 
 const addMockUsers = false;
 const addMockExperiments = false;
@@ -121,6 +129,85 @@ async function seedExperiments() {
   }
 }
 
+async function seedNAATPresets() {
+  console.log("Seeding NAAT presets...");
+
+  // Get admin user for owner reference
+  const adminUser = await db
+    .select()
+    .from(users)
+    .where(eq(users.email, "admin@example.com"))
+    .limit(1);
+
+  if (adminUser.length === 0) {
+    throw new Error("Admin user not found. Cannot seed NAAT presets.");
+  }
+
+  // Check if presets already exist
+  const existingPresets = await db
+    .select()
+    .from(naatExperiments)
+    .innerJoin(naatPresets, eq(naatExperiments.id, naatPresets.experimentId));
+
+  if (existingPresets.length > 0) {
+    console.log("NAAT presets already exist");
+    return;
+  }
+
+  // Insert presets and their associated data
+  for (const preset of NAAT_PRESETS) {
+    // Create experiment
+    const [experiment] = await db
+      .insert(naatExperiments)
+      .values({
+        id: uuidv4(),
+        name: preset.name,
+        numOfSampleConcentrations: preset.numOfSampleConcentrations,
+        numOfTechnicalReplicates: preset.numOfTechnicalReplicates,
+        mastermixVolumePerReaction: preset.mastermixVolumePerReaction,
+        sampleVolumePerReaction: preset.sampleVolumePerReaction,
+        pcrPlateSize: preset.pcrPlateSize,
+        ownerId: adminUser[0].id,
+      })
+      .returning();
+
+    // Mark as preset
+    await db.insert(naatPresets).values({
+      experimentId: experiment.id,
+      updatedBy: adminUser[0].id,
+    });
+
+    // Create mastermixes and their recipes
+    for (const mastermix of preset.mastermixes) {
+      const [newMastermix] = await db
+        .insert(masterMixes)
+        .values({
+          nameOfMastermix: mastermix.nameOfMastermix,
+          experimentalPlanId: experiment.id,
+          orderIndex: mastermix.orderIndex,
+        })
+        .returning();
+
+      // Create recipes for this mastermix
+      await db.insert(masterMixRecipes).values(
+        mastermix.recipes.map((recipe) => ({
+          orderIndex: recipe.orderIndex,
+          mastermixId: newMastermix.id,
+          finalSource: recipe.finalSource,
+          unit: recipe.unit,
+          finalConcentration: recipe.finalConcentration,
+          tipWashing: recipe.tipWashing,
+          stockConcentration: recipe.stockConcentration,
+          liquidType: recipe.liquidType,
+          dispenseType: recipe.dispenseType,
+        }))
+      );
+    }
+  }
+
+  console.log("NAAT presets seeded successfully");
+}
+
 async function seed() {
   try {
     console.log("Seeding database...");
@@ -143,6 +230,7 @@ async function seed() {
     await seedNAATVolumeUnits();
     await seedReagentPlates();
     await seedLFALiquidTypes();
+    await seedNAATPresets();
 
     console.log("Database seeded successfully");
   } catch (error) {

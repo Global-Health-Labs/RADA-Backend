@@ -8,6 +8,7 @@ import {
   masterMixes,
   masterMixRecipes,
   naatExperiments,
+  naatPresets,
   users,
 } from "../db/schema";
 import { authenticateToken } from "../middleware/auth";
@@ -54,6 +55,29 @@ async function getMastermixesForExperiment(experimentId: string) {
   };
 }
 
+async function hasExperimentAccess(
+  experimentOrId: typeof naatExperiments.$inferSelect | string,
+  user: Request["user"]
+) {
+  if (!experimentOrId || !user) {
+    return false;
+  }
+
+  const experiments =
+    typeof experimentOrId === "string"
+      ? await db
+          .select()
+          .from(naatExperiments)
+          .where(eq(naatExperiments.id, experimentOrId))
+          .limit(1)
+      : [experimentOrId];
+
+  return (
+    experiments[0].ownerId === user.id ||
+    ["admin", "supervisor"].includes(user.role)
+  );
+}
+
 // Helper function to format experiment data for client
 async function formatExperimentData(
   experiment: typeof naatExperiments.$inferSelect,
@@ -95,6 +119,32 @@ async function formatExperimentData(
   };
 }
 
+router.get(
+  "/presets",
+  authenticateToken,
+  async (req: Request, res: Response) => {
+    try {
+      const presets = await db
+        .select({
+          preset: naatPresets,
+          experiment: naatExperiments,
+        })
+        .from(naatPresets)
+        .leftJoin(
+          naatExperiments,
+          eq(naatPresets.experimentId, naatExperiments.id)
+        );
+
+      res.json(presets.map((preset) => preset.experiment));
+    } catch (error: any) {
+      console.error("Error fetching presets:", error);
+      res
+        .status(500)
+        .json({ message: "Failed to fetch presets", error: error.message });
+    }
+  }
+);
+
 // Get single experiment
 router.get(
   "/:experimentId",
@@ -107,13 +157,23 @@ router.get(
         .select({
           experiment: naatExperiments,
           owner: users,
+          preset: naatPresets,
         })
         .from(naatExperiments)
         .leftJoin(users, eq(naatExperiments.ownerId, users.id))
+        .leftJoin(naatPresets, eq(naatExperiments.id, naatPresets.experimentId))
         .where(eq(naatExperiments.id, experimentId));
 
       if (experiment.length === 0) {
         return res.status(404).json({ message: "Experiment not found" });
+      } else {
+        const hasAccess = await hasExperimentAccess(
+          experiment[0].experiment,
+          req.user
+        );
+        if (!hasAccess) {
+          return res.status(403).json({ message: "Forbidden" });
+        }
       }
 
       const formattedExperiment = await formatExperimentData(
@@ -121,7 +181,10 @@ router.get(
         experiment[0].owner?.fullname || "Owner not found"
       );
 
-      res.json(formattedExperiment);
+      res.json({
+        ...formattedExperiment,
+        useAsPreset: !!experiment[0].preset?.id,
+      });
     } catch (error: any) {
       console.error("Get experiment error:", error);
       res
@@ -134,36 +197,89 @@ router.get(
 // Create new experiment
 router.post("/", authenticateToken, async (req: Request, res: Response) => {
   try {
-    const {
-      name,
-      numOfSampleConcentrations,
-      numOfTechnicalReplicates,
-      mastermixVolumePerReaction,
-      sampleVolumePerReaction,
-      pcrPlateSize,
-      deckLayoutId,
-    } = req.body;
+    const { useAsPreset, presetId, ...experimentData } = req.body;
+    const userId = req.user?.id;
 
-    const newExperiment = await db
-      .insert(naatExperiments)
-      .values({
-        name,
-        numOfSampleConcentrations,
-        numOfTechnicalReplicates,
-        mastermixVolumePerReaction,
-        sampleVolumePerReaction,
-        pcrPlateSize,
-        deckLayoutId,
-        ownerId: req.user!.id,
-      })
-      .returning();
+    const result = await db.transaction(async (tx) => {
+      // Create the experiment
+      const [experiment] = await tx
+        .insert(naatExperiments)
+        .values({
+          ...experimentData,
+          ownerId: userId,
+        })
+        .returning();
 
-    res.status(201).json(newExperiment[0]);
-  } catch (error: any) {
-    console.error("Create experiment error:", error);
+      // If useAsPreset is true and user is admin, create preset
+      if (useAsPreset && req.user?.role === "admin") {
+        await tx.insert(naatPresets).values({
+          experimentId: experiment.id,
+          updatedBy: userId,
+        });
+      }
+
+      if (presetId) {
+        // read the experiment from preset id and copy the mastermixes of the preset experiment to new experiment
+        const presetExperiment = await tx
+          .select()
+          .from(naatExperiments)
+          .where(eq(naatExperiments.id, presetId))
+          .limit(1);
+
+        if (presetExperiment.length > 0) {
+          // Get all mastermixes from the preset experiment
+          const presetMastermixes = await tx
+            .select()
+            .from(masterMixes)
+            .where(eq(masterMixes.experimentalPlanId, presetId));
+
+          // Copy each mastermix and its recipes
+          for (const presetMastermix of presetMastermixes) {
+            // Create new mastermix
+            const [newMastermix] = await tx
+              .insert(masterMixes)
+              .values({
+                nameOfMastermix: presetMastermix.nameOfMastermix,
+                experimentalPlanId: experiment.id,
+                orderIndex: presetMastermix.orderIndex,
+              })
+              .returning();
+
+            // Get recipes for the preset mastermix
+            const presetRecipes = await tx
+              .select()
+              .from(masterMixRecipes)
+              .where(eq(masterMixRecipes.mastermixId, presetMastermix.id));
+
+            // Copy recipes to the new mastermix
+            if (presetRecipes.length > 0) {
+              await tx.insert(masterMixRecipes).values(
+                presetRecipes.map((recipe) => ({
+                  orderIndex: recipe.orderIndex,
+                  mastermixId: newMastermix.id,
+                  finalSource: recipe.finalSource,
+                  unit: recipe.unit,
+                  finalConcentration: recipe.finalConcentration,
+                  tipWashing: recipe.tipWashing,
+                  stockConcentration: recipe.stockConcentration,
+                  liquidType: recipe.liquidType,
+                  dispenseType: recipe.dispenseType,
+                }))
+              );
+            }
+          }
+        }
+      }
+
+      return experiment;
+    });
+
     res
-      .status(500)
-      .json({ message: "Failed to create experiment", error: error.message });
+      .status(201)
+      .json(await formatExperimentData(result, req.user?.fullName || ""));
+  } catch (error) {
+    console.error("Error creating experiment:", error);
+    res.status(500).json({ error: "Failed to create experiment" });
   }
 });
 
@@ -238,47 +354,66 @@ router.put(
   authenticateToken,
   async (req: Request, res: Response) => {
     try {
-      const { experimentId } = req.params;
-      const {
-        name,
-        numOfSampleConcentrations,
-        numOfTechnicalReplicates,
-        mastermixVolumePerReaction,
-        sampleVolumePerReaction,
-        pcrPlateSize,
-        deckLayoutId,
-      } = req.body;
+      const experimentId = req.params.experimentId;
+      const { useAsPreset, ...experimentData } = req.body;
+      const userId = req.user?.id;
 
-      const updatedExperiment = await db
-        .update(naatExperiments)
-        .set({
-          name,
-          numOfSampleConcentrations,
-          numOfTechnicalReplicates,
-          mastermixVolumePerReaction,
-          sampleVolumePerReaction,
-          pcrPlateSize,
-          deckLayoutId,
-          updatedAt: new Date(),
-        })
-        .where(
-          and(
-            eq(naatExperiments.id, experimentId),
-            eq(naatExperiments.ownerId, req.user!.id)
-          )
-        )
-        .returning();
+      // First verify the experiment exists and belongs to the user
+      const experiment = await db
+        .select()
+        .from(naatExperiments)
+        .where(and(eq(naatExperiments.id, experimentId)))
+        .limit(1);
 
-      if (updatedExperiment.length === 0) {
+      if (!experiment || experiment.length === 0) {
         return res.status(404).json({ message: "Experiment not found" });
+      } else {
+        const hasAccess = await hasExperimentAccess(experiment[0], req.user);
+        if (!hasAccess) {
+          return res.status(403).json({ message: "Forbidden" });
+        }
       }
 
-      res.json(updatedExperiment[0]);
-    } catch (error: any) {
-      console.error("Update experiment error:", error);
-      res
-        .status(500)
-        .json({ message: "Failed to update experiment", error: error.message });
+      const result = await db.transaction(async (tx) => {
+        // Update the experiment
+        const [experiment] = await tx
+          .update(naatExperiments)
+          .set({
+            ...experimentData,
+            updatedAt: new Date(),
+          })
+          .where(eq(naatExperiments.id, experimentId))
+          .returning();
+
+        // Handle preset status
+        if (req.user?.role === "admin") {
+          const existingPreset = await tx
+            .select()
+            .from(naatPresets)
+            .where(eq(naatPresets.experimentId, experimentId))
+            .limit(1);
+
+          if (useAsPreset && existingPreset.length === 0) {
+            // Create new preset
+            await tx.insert(naatPresets).values({
+              experimentId: experiment.id,
+              updatedBy: userId,
+            });
+          } else if (!useAsPreset && existingPreset.length > 0) {
+            // Remove existing preset
+            await tx
+              .delete(naatPresets)
+              .where(eq(naatPresets.experimentId, experimentId));
+          }
+        }
+
+        return experiment;
+      });
+
+      res.json(await formatExperimentData(result, req.user?.fullName || ""));
+    } catch (error) {
+      console.error("Error updating experiment:", error);
+      res.status(500).json({ error: "Failed to update experiment" });
     }
   }
 );
@@ -381,7 +516,10 @@ router.get(
 router.put("/:id/mastermix", async (req: Request, res: Response) => {
   try {
     const experimentId = req.params.id;
-    const { mastermixes } = req.body;
+    const mastermixes = req.body.mastermixes.map((m: any, index: number) => ({
+      ...m,
+      orderIndex: index + 1,
+    }));
 
     // Get existing mastermixes for this experiment
     const existingMastermixes = await db
@@ -430,6 +568,7 @@ router.put("/:id/mastermix", async (req: Request, res: Response) => {
             .update(masterMixes)
             .set({
               nameOfMastermix: mastermix.name,
+              orderIndex: mastermix.orderIndex,
             })
             .where(eq(masterMixes.id, mastermix.id));
 
@@ -506,6 +645,7 @@ router.put("/:id/mastermix", async (req: Request, res: Response) => {
             id: mastermix.id,
             nameOfMastermix: mastermix.name,
             experimentalPlanId: experimentId,
+            orderIndex: mastermix.orderIndex,
           });
 
           // Create all its recipes

@@ -1,7 +1,12 @@
 import { and, asc, desc, eq, ilike, sql } from "drizzle-orm";
 import { Request, Response, Router } from "express";
 import { db } from "../db";
-import { lfaExperiments, naatExperiments, users } from "../db/schema";
+import {
+  lfaExperiments,
+  naatExperiments,
+  naatPresets,
+  users,
+} from "../db/schema";
 import { authenticateToken } from "../middleware/auth";
 import {
   getPresignedUrl,
@@ -21,6 +26,7 @@ export type Experiment = {
   ownerId: string;
   ownerFullName: string;
   type: "LFA" | "NAAT";
+  useAsPreset: boolean;
 };
 
 interface PaginatedResponse<T> {
@@ -65,9 +71,13 @@ const getExperimentsQuery = async (
         owner: {
           fullname: users.fullname,
         },
+        preset: {
+          id: naatPresets.id,
+        },
       })
       .from(naatExperiments)
-      .leftJoin(users, eq(naatExperiments.ownerId, users.id));
+      .leftJoin(users, eq(naatExperiments.ownerId, users.id))
+      .leftJoin(naatPresets, eq(naatExperiments.id, naatPresets.experimentId));
   } else {
     baseQuery = db
       .select({
@@ -153,13 +163,15 @@ const getExperimentsQuery = async (
   const data = (await baseQuery) as Array<{
     experiment: Experiment;
     owner: { fullname: string };
+    preset?: { id: string } | null;
   }>;
   return {
-    data: data.map(({ experiment, owner }) =>
+    data: data.map(({ experiment, owner, preset }) =>
       formatExperimentData(
         experiment,
         owner?.fullname || "Owner not found",
-        query.type
+        query.type,
+        !!preset
       )
     ),
     meta: {
@@ -175,7 +187,8 @@ const getExperimentsQuery = async (
 function formatExperimentData(
   experiment: Experiment,
   ownerName: string,
-  type: "LFA" | "NAAT"
+  type: "LFA" | "NAAT",
+  useAsPreset: boolean
 ): Experiment {
   return {
     id: experiment.id,
@@ -185,6 +198,7 @@ function formatExperimentData(
     updatedAt: experiment.updatedAt,
     ownerId: experiment.ownerId,
     type: type,
+    useAsPreset: useAsPreset,
   };
 }
 
@@ -216,23 +230,11 @@ router.get("/", authenticateToken, async (req: Request, res: Response) => {
 });
 
 // File operations
-router.post(
-  "/:experimentId/files/presign",
-  authenticateToken,
-  getPresignedUrl
-);
+router.post("/:experimentId/files/presign", authenticateToken, getPresignedUrl);
 
-router.post(
-  "/:experimentId/files",
-  authenticateToken,
-  saveFileMetadata
-);
+router.post("/:experimentId/files", authenticateToken, saveFileMetadata);
 
-router.get(
-  "/:experimentId/files",
-  authenticateToken,
-  getExperimentFiles
-);
+router.get("/:experimentId/files", authenticateToken, getExperimentFiles);
 
 router.get(
   "/:experimentId/files/:fileId/download",
@@ -240,10 +242,6 @@ router.get(
   getFileDownloadUrl
 );
 
-router.delete(
-  "/:experimentId/files/:fileId",
-  authenticateToken,
-  deleteFile
-);
+router.delete("/:experimentId/files/:fileId", authenticateToken, deleteFile);
 
 export default router;
