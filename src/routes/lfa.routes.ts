@@ -1,17 +1,17 @@
 import { Router } from "express";
 import {
-  createLFAExperiment,
-  updateExperimentSteps,
-  getExperimentSteps,
-  getExperiment,
-  updateLFAExperiment,
-  exportExperiment,
-  getExperimentInstructions,
   cloneLFAExperiment,
+  createLFAExperiment,
+  exportExperiment,
+  getExperiment,
+  getExperimentInstructions,
+  getExperimentSteps,
   getLFADeckLayouts,
+  getLFAPresets,
+  updateExperimentSteps,
+  updateLFAExperiment,
 } from "../controllers/lfa.controller";
 import { authenticateToken } from "../middleware/auth";
-import { db } from "../db";
 
 const router = Router();
 
@@ -20,6 +20,9 @@ router.post("/", authenticateToken, createLFAExperiment);
 
 // Get deck layouts
 router.get("/deck-layouts", authenticateToken, getLFADeckLayouts);
+
+// Get presets
+router.get("/presets", authenticateToken, getLFAPresets);
 
 // update experiment
 router.put("/:id", authenticateToken, updateLFAExperiment);

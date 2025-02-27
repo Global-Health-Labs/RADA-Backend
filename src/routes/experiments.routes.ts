@@ -3,6 +3,7 @@ import { Request, Response, Router } from "express";
 import { db } from "../db";
 import {
   lfaExperiments,
+  lfaPresets,
   naatExperiments,
   naatPresets,
   users,
@@ -91,9 +92,13 @@ const getExperimentsQuery = async (
         owner: {
           fullname: users.fullname,
         },
+        preset: {
+          id: lfaPresets.id,
+        },
       })
       .from(lfaExperiments)
-      .leftJoin(users, eq(lfaExperiments.ownerId, users.id));
+      .leftJoin(users, eq(lfaExperiments.ownerId, users.id))
+      .leftJoin(lfaPresets, eq(lfaExperiments.id, lfaPresets.experimentId));
   }
 
   // Apply filters
@@ -165,6 +170,7 @@ const getExperimentsQuery = async (
     owner: { fullname: string };
     preset?: { id: string } | null;
   }>;
+
   return {
     data: data.map(({ experiment, owner, preset }) =>
       formatExperimentData(

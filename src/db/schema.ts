@@ -226,6 +226,14 @@ export const naatPresets = pgTable("naat_preset", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+export const lfaPresets = pgTable("lfa_preset", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  experimentId: uuid("experiment_id").references(() => lfaExperiments.id),
+  updatedBy: uuid("updated_by").references(() => users.id),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Relations
 export const usersRelations = relations(users, ({ one }) => ({
   role: one(roles, {
@@ -310,6 +318,10 @@ export const lfaExperimentsRelations = relations(
       references: [users.id],
     }),
     files: many(experimentFiles, { relationName: "lfaExperimentFiles" }),
+    preset: one(lfaPresets, {
+      fields: [lfaExperiments.id],
+      references: [lfaPresets.experimentId],
+    }),
   })
 );
 
@@ -339,3 +351,10 @@ export const experimentFilesRelations = relations(
     }),
   })
 );
+
+export const lfaPresetsRelations = relations(lfaPresets, ({ one }) => ({
+  experiment: one(lfaExperiments, {
+    fields: [lfaPresets.experimentId],
+    references: [lfaExperiments.id],
+  }),
+}));

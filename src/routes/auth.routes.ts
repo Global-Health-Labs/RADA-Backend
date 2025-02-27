@@ -15,8 +15,6 @@ router.post("/login", async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
 
-    console.log(email, password);
-
     // Find user
     const [userWithRole] = await db
       .select()

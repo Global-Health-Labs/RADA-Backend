@@ -38,11 +38,6 @@ router.post("/", async (req: Request, res: Response) => {
       return res.status(400).json({ message: "Invalid role" });
     }
 
-    console.log("Found role record:", {
-      roleId: roleRecord.id,
-      roleName: roleRecord.name,
-    });
-
     // Generate temporary password
     const tempPassword = generateTemporaryPassword();
 

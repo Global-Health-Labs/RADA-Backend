@@ -4,7 +4,7 @@ import { createObjectCsvWriter } from "csv-writer";
 import { eq } from "drizzle-orm";
 import { Request, Response } from "express";
 import * as fs from "fs";
-import { camelCase, omit } from "lodash";
+import { camelCase, omit, size } from "lodash";
 import * as path from "path";
 import { db } from "../db";
 import {
@@ -12,6 +12,7 @@ import {
   lfaDeckLayouts,
   lfaExperiments,
   lfaSteps,
+  lfaPresets,
   users,
 } from "../db/schema";
 import { ExportQueue } from "../utils/ExportQueue";
@@ -52,6 +53,7 @@ async function getExperimentWithAccess(experimentId: string, userId: string) {
           fullname: true,
         },
       },
+      preset: true,
     },
   });
 
@@ -73,12 +75,13 @@ async function getExperimentWithAccess(experimentId: string, userId: string) {
     }
   }
 
-  const { owner, ...experimentWithoutOwner } = experiment;
+  const { owner, preset, ...experimentWithoutOwner } = experiment;
 
   return {
     ...experimentWithoutOwner,
     ownerFullName: owner?.fullname,
     type: "LFA",
+    useAsPreset: !!preset,
   };
 }
 
@@ -90,7 +93,8 @@ export async function createLFAExperiment(req: Request, res: Response) {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
-    const { name, numReplicates, deckLayoutId } = req.body;
+    const { name, numReplicates, deckLayoutId, useAsPreset, presetId } =
+      req.body;
 
     // Validate deck layout exists
     const deckLayout = await db.query.lfaDeckLayouts.findFirst({
@@ -105,17 +109,51 @@ export async function createLFAExperiment(req: Request, res: Response) {
     }
 
     // Create new LFA experiment
-    const [experiment] = await db
-      .insert(lfaExperiments)
-      .values({
-        name,
-        numReplicates,
-        deckLayoutId,
-        ownerId: userId,
-      })
-      .returning();
+    const result = await db.transaction(async (tx) => {
+      // Create the experiment
+      const [experiment] = await tx
+        .insert(lfaExperiments)
+        .values({
+          name,
+          numReplicates,
+          deckLayoutId,
+          ownerId: userId,
+        })
+        .returning();
 
-    return res.json(experiment);
+      // If useAsPreset is true and user is admin, create preset
+      if (useAsPreset && req.user?.role === "admin") {
+        await tx.insert(lfaPresets).values({
+          experimentId: experiment.id,
+          updatedBy: userId,
+        });
+      }
+
+      // If presetId is provided, copy steps from the preset experiment
+      if (presetId) {
+        // Get the preset experiment with steps
+        const presetExperiment = await db.query.lfaExperiments.findFirst({
+          where: eq(lfaExperiments.id, presetId),
+          with: {
+            steps: true,
+          },
+        });
+
+        // If preset experiment exists and has steps, copy them to the new experiment
+        if (presetExperiment && size(presetExperiment.steps) > 0) {
+          await tx.insert(lfaSteps).values(
+            presetExperiment.steps.map((step) => ({
+              ...omit(step, "id"),
+              experimentId: experiment.id,
+            }))
+          );
+        }
+      }
+
+      return experiment;
+    });
+
+    return res.json(result);
   } catch (error) {
     console.error("Error creating LFA experiment:", error);
     res.status(500).json({ error: "Failed to create LFA experiment" });
@@ -142,7 +180,7 @@ export async function updateLFAExperiment(req: Request, res: Response) {
         .json({ error: "Experiment not found or access denied" });
     }
 
-    const updateData = { ...req.body };
+    const { useAsPreset, ...updateData } = req.body;
     delete updateData.id; // Remove id from update data
     delete updateData.ownerId; // Prevent owner change
 
@@ -158,18 +196,45 @@ export async function updateLFAExperiment(req: Request, res: Response) {
     }
 
     // Update the experiment
-    const [updated] = await db
-      .update(lfaExperiments)
-      .set({
-        name: updateData.name,
-        numReplicates: updateData.numReplicates,
-        deckLayoutId: updateData.deckLayoutId,
-        updatedAt: new Date(),
-      })
-      .where(eq(lfaExperiments.id, experimentId))
-      .returning();
+    const result = await db.transaction(async (tx) => {
+      // Update the experiment
+      const [experiment] = await tx
+        .update(lfaExperiments)
+        .set({
+          name: updateData.name,
+          numReplicates: updateData.numReplicates,
+          deckLayoutId: updateData.deckLayoutId,
+          updatedAt: new Date(),
+        })
+        .where(eq(lfaExperiments.id, experimentId))
+        .returning();
 
-    res.json(updated);
+      // Handle preset status
+      if (req.user?.role === "admin") {
+        const existingPreset = await tx
+          .select()
+          .from(lfaPresets)
+          .where(eq(lfaPresets.experimentId, experimentId))
+          .limit(1);
+
+        if (useAsPreset && existingPreset.length === 0) {
+          // Create new preset
+          await tx.insert(lfaPresets).values({
+            experimentId: experiment.id,
+            updatedBy: userId,
+          });
+        } else if (!useAsPreset && existingPreset.length > 0) {
+          // Remove existing preset
+          await tx
+            .delete(lfaPresets)
+            .where(eq(lfaPresets.experimentId, experimentId));
+        }
+      }
+
+      return experiment;
+    });
+
+    res.json(result);
   } catch (error) {
     console.error("Error updating LFA experiment:", error);
     res.status(500).json({ error: "Failed to update LFA experiment" });
@@ -601,5 +666,24 @@ export async function getLFADeckLayouts(req: Request, res: Response) {
   } catch (error) {
     console.error("Error fetching LFA deck layouts:", error);
     res.status(500).json({ message: "Failed to fetch deck layouts" });
+  }
+}
+
+export async function getLFAPresets(req: Request, res: Response) {
+  try {
+    const presets = await db
+      .select({
+        preset: lfaPresets,
+        experiment: lfaExperiments,
+      })
+      .from(lfaPresets)
+      .leftJoin(lfaExperiments, eq(lfaPresets.experimentId, lfaExperiments.id));
+
+    res.json(presets.map((preset) => preset.experiment));
+  } catch (error: any) {
+    console.error("Error fetching LFA presets:", error);
+    res
+      .status(500)
+      .json({ message: "Failed to fetch LFA presets", error: error.message });
   }
 }
