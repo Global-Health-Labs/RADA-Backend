@@ -11,6 +11,7 @@ import {
   updateExperimentSteps,
   updateLFAExperiment,
 } from "../controllers/lfa.controller";
+import { getLFAConfigs } from "../controllers/lfa-settings.controller";
 import { authenticateToken } from "../middleware/auth";
 
 const router = Router();
@@ -23,6 +24,9 @@ router.get("/deck-layouts", authenticateToken, getLFADeckLayouts);
 
 // Get presets
 router.get("/presets", authenticateToken, getLFAPresets);
+
+// Get assay plate configurations
+router.get("/assay-plate-configs", authenticateToken, getLFAConfigs);
 
 // update experiment
 router.put("/:id", authenticateToken, updateLFAExperiment);

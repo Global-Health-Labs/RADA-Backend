@@ -306,14 +306,11 @@ def assign_src(worklist, plate_df, nzfill):
     :param nzfill: number to fill with leading zeros to
     :return: worklist with sources
     """
-    # print("\n=== Starting assign_src ===")
     # first tally up the total volume
     source_df = worklist.groupby('source')['volume_ul'].sum().to_frame().reset_index()
     step_df = worklist.loc[:, ['source', 'step_index', 'step']].drop_duplicates()
     source_df = source_df.merge(step_df).sort_values(['source'])
     source_df = source_df[source_df['volume_ul'] > 0]
-    # print("\nInitial source_df:")
-    # print(source_df)
 
     # reagent plate df
     plate_df['volume_usable'] = plate_df['volume_well'] - plate_df['volume_holdover']
@@ -331,8 +328,8 @@ def assign_src(worklist, plate_df, nzfill):
     # print(source_df)
     
     source_df = source_df.merge(plate_df)
-    print("\nSource_df after merge with plate_df:")
-    print(source_df.to_string())
+    # print("\nSource_df after merge with plate_df:")
+    # print(source_df.to_string())
 
     # assign wells
     # go through each step, plate combo and assign well numbers
@@ -371,9 +368,11 @@ def assign_src(worklist, plate_df, nzfill):
         merge(source_df, how='outer'). \
         sort_values('index').drop('index', axis=1)
 
+
     # special case for imaging
     worklist.loc[worklist['step'] == 'imaging', 'from_plate'] = worklist.loc[worklist['step'] == 'imaging', 'to_plate']
     worklist.loc[worklist['step'] == 'imaging', 'from_well'] = worklist.loc[worklist['step'] == 'imaging', 'to_well']
+
 
     # special case for the reservoir
     for each in worklist['group_number'].unique():
@@ -431,6 +430,8 @@ def make_worklist_one_run(exp_input, delimiter_cell, delimiter_col,  # info abou
 
     worklist = reorder_groups(worklist, time_df)
 
+    print(factorial['worklist'])
+
     # clean up worklist
     worklist = cleanup_worklist(worklist=worklist, dispense_type=dispense_type, asp_mixing=asp_mixing)
     worklist['touchoff_dis'] = -1  # hard code here because it is always the case when dispensing on LFAs
@@ -446,7 +447,6 @@ def make_worklist_one_run(exp_input, delimiter_cell, delimiter_col,  # info abou
 
 
     # source assignment
-    #print('PlateDF before assigning source:', plate_df)
     source_out = assign_src(worklist=worklist,
                             plate_df=plate_df,
                             nzfill=nzfill)

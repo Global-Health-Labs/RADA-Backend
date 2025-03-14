@@ -140,6 +140,9 @@ export const lfaExperiments = pgTable("lfa_experiment", {
   deckLayoutId: uuid("deck_layout_id")
     .references(() => lfaDeckLayouts.id)
     .notNull(),
+  assayPlateConfigId: uuid("assay_plate_config_id")
+    .references(() => assayPlateConfigs.id)
+    .notNull(),
   ownerId: uuid("owner_id")
     .references(() => users.id)
     .notNull(),
@@ -210,9 +213,6 @@ export const lfaDeckLayouts = pgTable("lfa_deck_layout", {
       sequenceNumber: string;
     }>
   >(),
-  assayPlateConfigId: uuid("assay_plate_config_id")
-    .notNull()
-    .references(() => assayPlateConfigs.id),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
   createdBy: uuid("created_by").references(() => users.id),
@@ -295,10 +295,6 @@ export const deckLayoutsRelations = relations(deckLayouts, ({ one }) => ({
 }));
 
 export const lfaDeckLayoutRelations = relations(lfaDeckLayouts, ({ one }) => ({
-  assayPlateConfig: one(assayPlateConfigs, {
-    fields: [lfaDeckLayouts.assayPlateConfigId],
-    references: [assayPlateConfigs.id],
-  }),
   creator: one(users, {
     fields: [lfaDeckLayouts.createdBy],
     references: [users.id],
@@ -311,6 +307,10 @@ export const lfaExperimentsRelations = relations(
     deckLayout: one(lfaDeckLayouts, {
       fields: [lfaExperiments.deckLayoutId],
       references: [lfaDeckLayouts.id],
+    }),
+    assayPlateConfig: one(assayPlateConfigs, {
+      fields: [lfaExperiments.assayPlateConfigId],
+      references: [assayPlateConfigs.id],
     }),
     steps: many(lfaSteps),
     owner: one(users, {
