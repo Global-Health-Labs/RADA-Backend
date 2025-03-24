@@ -1,0 +1,2 @@
+ALTER TABLE "experimental_plan" ADD COLUMN "mixing_step_liquid_type" varchar(50) DEFAULT 'water';--> statement-breakpoint
+ALTER TABLE "experimental_plan" ADD COLUMN "aq_step_liquid_type" varchar(50) DEFAULT 'water';
