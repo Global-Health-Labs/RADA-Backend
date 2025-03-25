@@ -20,7 +20,6 @@ def get_source(worklist, plate_df):
     source_real['plate'] = source_real['from_plate'].str.rsplit('_', n=1, expand=True).iloc[:, 0].values
     source_real = source_real.merge(plate_df, how='left')
     source_real['volume_user_input'] = source_real['volume_ul'] + source_real['volume_holdover']
-    # print("source_real:\n", source_real)
     return source_real
 
 
@@ -46,11 +45,6 @@ def get_dilution_df(target, diluent, sol_df, target_volume=None, tolerance=0.01)
     :param tolerance: tolerance of concentrations
     :return: dataframe describing how to make the solution
     """
-    # print('target\n', target)
-    # print('diluent\n', diluent)
-    # print('sol_df\n', sol_df)
-    # print('target_volume\n', target_volume)
-    # print('tolerance\n', tolerance)
     if (target_volume==None).any():
         target_volume = np.ones(len(target))
 
@@ -86,8 +80,6 @@ def get_dilution_df(target, diluent, sol_df, target_volume=None, tolerance=0.01)
     make_df = pd.concat(list_each_make_df, sort=False).round(2).fillna(0)
     make_df[make_df == -0] = 0
     make_df['target'] = make_df.index.values
-    # print('make_df\n', make_df)
-    # print('list_each_make_df\n', list_each_make_df)
     return make_df
 
 
@@ -187,7 +179,6 @@ def renumber_reservoir(worklist, reservoir_tag='ivl_1_'):
     :param reservoir_tag: tag for reservoirs
     :return: new worklist
     """
-    # print('worklist\n', worklist)
     out = worklist.copy()
     for each in out['group_number'].unique():
         # for from plate
@@ -198,7 +189,6 @@ def renumber_reservoir(worklist, reservoir_tag='ivl_1_'):
         sub = out[(out['group_number'] == each) & (out['to_plate'].str.contains(reservoir_tag))]
         if sub.shape[0] > 0:
             out.loc[sub.index.values, 'to_well'] = np.arange(sub.shape[0]) % 8 + 1
-    # print('out\n', out)
     return out
 
 
@@ -212,10 +202,6 @@ def assign_plate_well(worklist, plate_df_input, colname, use_holdover=1):
     :return: dataframe of plates and wells
     """
     # first tally up the total volume
-    # print('worklist\n', worklist)
-    # print('plate_df_input\n', plate_df_input)
-    # print('colname\n', colname)
-    # print('use_holdover\n', use_holdover)
     well_df = worklist.groupby(colname)['volume_ul'].sum().to_frame().reset_index()
     well_df = well_df[well_df['volume_ul'] > 0]
 
@@ -234,7 +220,6 @@ def assign_plate_well(worklist, plate_df_input, colname, use_holdover=1):
     well_df['well_number'] = 0
 
     for each_plate in well_df['plate'].unique():
-        # print(f"\nProcessing plate: {each_plate}")
         sub = well_df[well_df['plate'] == each_plate]
         nwellperplate = sub['nwellperplate'].values[0]
         plate_well = np.arange(sub.shape[0])
@@ -242,8 +227,6 @@ def assign_plate_well(worklist, plate_df_input, colname, use_holdover=1):
         well_df.loc[sub.index.values, 'well_number'] = plate_well % nwellperplate + 1
 
     well_df = well_df[[colname, 'plate', 'plate_number', 'well_number']]
-    # print('well_df\n', well_df)
-    # print('-----------------------------------------------')
     return well_df
 
 
@@ -258,12 +241,6 @@ def get_worklist_from_recipe(make_solution_df, tip_size, plate_df, liquid_type_d
     :param nzfill: number of digits to fill with leading zeroes to
     :return: new worklist
     """
-    # print('make_solution_df\n', make_solution_df)
-    # print('tip_size\n', tip_size)
-    # print('plate_df\n', plate_df)
-    # print('liquid_type_df\n', liquid_type_df)
-    # print('n_per_group\n', n_per_group)
-    # print('nzfill\n', nzfill)
     
     # first turn df into transfer list
     worklist = make_solution_df.melt(id_vars='target', var_name='source', value_name='volume_ul')
@@ -343,7 +320,6 @@ def get_worklist_from_recipe(make_solution_df, tip_size, plate_df, liquid_type_d
 
     # renumber reservoir
     worklist = renumber_reservoir(worklist)
-    # print('worklist\n', worklist.to_string())
     return worklist
 
 
@@ -896,7 +872,6 @@ def full_from_run_worklist(run_worklist_input, diluent, sol_df, liquid_type_df, 
     :param nzfill: number of digits to fill to using leading zeroes
     :return: dictionary, including worklist and info for the user to put solutions, labware, and tips on
     """
-    # print('diluent', diluent, '\nsol_df', sol_df, '\nliquid_type_df', liquid_type_df, '\nplate_df', plate_df, '\nreservoir_tag', reservoir_tag, '\nassay_plate_tag', assay_plate_tag, '\ntip_size', tip_size, '\nn_per_group', n_per_group, '\nzfill', nzfill)
     run_worklist = run_worklist_input.copy()
 
     source = get_source(run_worklist, plate_df)
@@ -915,7 +890,6 @@ def full_from_run_worklist(run_worklist_input, diluent, sol_df, liquid_type_df, 
                   'n_per_group': 8,
                   'nzfill': 4}
     output = make_solution_worklist(source_unique, **input_dict)
-
     if output['worklist'].shape[0] > 0:
         sol_worklist = output['worklist'].copy()
         run_worklist, sol_worklist = shift_plate_worklist(run_worklist, sol_worklist)

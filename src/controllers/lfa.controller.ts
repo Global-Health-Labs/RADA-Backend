@@ -18,9 +18,8 @@ import {
 import { ExportQueue } from "../utils/ExportQueue";
 
 type LFAExperimentWithDeckLayout = typeof lfaExperiments.$inferSelect & {
-  deckLayout: typeof lfaDeckLayouts.$inferSelect & {
-    assayPlateConfig: typeof assayPlateConfigs.$inferSelect;
-  };
+  deckLayout: typeof lfaDeckLayouts.$inferSelect;
+  assayPlateConfig: typeof assayPlateConfigs.$inferSelect;
   steps: (typeof lfaSteps.$inferSelect)[];
 };
 
@@ -40,11 +39,8 @@ async function getExperimentWithAccess(experimentId: string, userId: string) {
   const experiment = await db.query.lfaExperiments.findFirst({
     where: eq(lfaExperiments.id, experimentId),
     with: {
-      deckLayout: {
-        with: {
-          assayPlateConfig: true,
-        },
-      },
+      deckLayout: true,
+      assayPlateConfig: true,
       steps: {
         orderBy: (steps, { asc }) => [asc(steps.orderIndex)],
       },
@@ -93,19 +89,31 @@ export async function createLFAExperiment(req: Request, res: Response) {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
-    const { name, numReplicates, deckLayoutId, useAsPreset, presetId } =
-      req.body;
+    const {
+      name,
+      numReplicates,
+      deckLayoutId,
+      useAsPreset,
+      presetId,
+      assayPlateConfigId,
+    } = req.body;
 
     // Validate deck layout exists
     const deckLayout = await db.query.lfaDeckLayouts.findFirst({
       where: eq(lfaDeckLayouts.id, deckLayoutId),
-      with: {
-        assayPlateConfig: true,
-      },
     });
 
     if (!deckLayout) {
       return res.status(404).json({ error: "Deck Layout not found" });
+    }
+
+    // Validate assay plate config exists
+    const assayPlateConfig = await db.query.assayPlateConfigs.findFirst({
+      where: eq(assayPlateConfigs.id, assayPlateConfigId),
+    });
+
+    if (!assayPlateConfig) {
+      return res.status(404).json({ error: "Assay Plate Config not found" });
     }
 
     // Create new LFA experiment
@@ -117,6 +125,7 @@ export async function createLFAExperiment(req: Request, res: Response) {
           name,
           numReplicates,
           deckLayoutId,
+          assayPlateConfigId,
           ownerId: userId,
         })
         .returning();
@@ -195,6 +204,17 @@ export async function updateLFAExperiment(req: Request, res: Response) {
       }
     }
 
+    // If assayPlateConfigId is being updated, validate it exists
+    if (updateData.assayPlateConfigId) {
+      const assayPlateConfig = await db.query.assayPlateConfigs.findFirst({
+        where: eq(assayPlateConfigs.id, updateData.assayPlateConfigId),
+      });
+
+      if (!assayPlateConfig) {
+        return res.status(404).json({ error: "Assay plate config not found" });
+      }
+    }
+
     // Update the experiment
     const result = await db.transaction(async (tx) => {
       // Update the experiment
@@ -204,6 +224,7 @@ export async function updateLFAExperiment(req: Request, res: Response) {
           name: updateData.name,
           numReplicates: updateData.numReplicates,
           deckLayoutId: updateData.deckLayoutId,
+          assayPlateConfigId: updateData.assayPlateConfigId,
           updatedAt: new Date(),
         })
         .where(eq(lfaExperiments.id, experimentId))
@@ -394,7 +415,7 @@ async function updateInputMasterFile(
 
   // Update values based on plate config
   const updatedRows = rows.map((row) => {
-    const plateConfig = experiment.deckLayout.assayPlateConfig;
+    const plateConfig = experiment.assayPlateConfig;
     switch (row.key) {
       case "nplate":
         return { ...row, value: plateConfig.numPlates.toString() };
@@ -622,6 +643,7 @@ export async function cloneLFAExperiment(req: Request, res: Response) {
           name: `${originalExperiment.name} (Copy)`,
           numReplicates: originalExperiment.numReplicates,
           deckLayoutId: originalExperiment.deckLayoutId,
+          assayPlateConfigId: originalExperiment.assayPlateConfigId,
           ownerId: userId,
         })
         .returning();
@@ -651,9 +673,14 @@ export async function cloneLFAExperiment(req: Request, res: Response) {
 
 export async function getLFADeckLayouts(req: Request, res: Response) {
   try {
-    const layouts = await db.query.lfaDeckLayouts.findMany({
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+
+    const deckLayouts = await db.query.lfaDeckLayouts.findMany({
       with: {
-        assayPlateConfig: true,
         creator: {
           columns: {
             fullname: true,
@@ -662,10 +689,16 @@ export async function getLFADeckLayouts(req: Request, res: Response) {
       },
       orderBy: (layouts, { desc }) => [desc(layouts.createdAt)],
     });
-    res.json(layouts);
+
+    const formattedLayouts = deckLayouts.map((layout) => ({
+      ...layout,
+      createdBy: layout.creator?.fullname || "Unknown",
+    }));
+
+    return res.json(formattedLayouts);
   } catch (error) {
     console.error("Error fetching LFA deck layouts:", error);
-    res.status(500).json({ message: "Failed to fetch deck layouts" });
+    return res.status(500).json({ error: "Failed to fetch deck layouts" });
   }
 }
 

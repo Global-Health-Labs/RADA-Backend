@@ -22,11 +22,12 @@ import {
 const router = Router();
 
 const locationSchema = z.object({
+  name: z.string().min(1, "Name is required").max(100, "Name must be at most 100 characters"),
   dx: z.number().min(0, "X offset must be non-negative"),
   dz: z.number().min(0, "Z offset must be non-negative"),
 });
 
-const configSchema = z.object({
+const assayPatConfigSchema = z.object({
   id: z.string().optional(),
   name: z.string().min(1, "Name is required"),
   description: z.string(),
@@ -76,7 +77,7 @@ router.get("/assay-plate-configs", getLFAConfigs);
 router.post(
   "/assay-plate-configs",
   validateRequest({
-    body: configSchema.omit({ id: true }),
+    body: assayPatConfigSchema.omit({ id: true }),
   }),
   createLFAConfig
 );
@@ -85,7 +86,7 @@ router.post(
 router.put(
   "/assay-plate-configs/:id",
   validateRequest({
-    body: configSchema.omit({ id: true }),
+    body: assayPatConfigSchema.omit({ id: true }),
     params: z.object({
       id: z.string(),
     }),

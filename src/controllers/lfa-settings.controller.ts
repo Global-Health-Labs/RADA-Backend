@@ -200,7 +200,6 @@ export async function getLFADeckLayouts(req: Request, res: Response) {
   try {
     const layouts = await db.query.lfaDeckLayouts.findMany({
       with: {
-        assayPlateConfig: true,
         creator: {
           columns: {
             fullname: true,
@@ -237,7 +236,6 @@ export async function createLFADeckLayout(req: Request, res: Response) {
         name,
         description,
         platePositions,
-        assayPlateConfigId,
         createdBy: req.user?.id,
       })
       .returning();
@@ -245,7 +243,6 @@ export async function createLFADeckLayout(req: Request, res: Response) {
     const layoutWithRelations = await db.query.lfaDeckLayouts.findFirst({
       where: (layouts, { eq }) => eq(layouts.id, layout.id),
       with: {
-        assayPlateConfig: true,
         creator: {
           columns: {
             fullname: true,
@@ -294,7 +291,6 @@ export async function updateLFADeckLayout(req: Request, res: Response) {
         name,
         description,
         platePositions,
-        assayPlateConfigId,
         updatedAt: new Date(),
       })
       .where(eq(lfaDeckLayouts.id, id))
@@ -303,7 +299,6 @@ export async function updateLFADeckLayout(req: Request, res: Response) {
     const layoutWithRelations = await db.query.lfaDeckLayouts.findFirst({
       where: (layouts, { eq }) => eq(layouts.id, updatedLayout.id),
       with: {
-        assayPlateConfig: true,
         creator: {
           columns: {
             fullname: true,

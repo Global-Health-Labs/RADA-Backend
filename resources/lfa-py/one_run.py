@@ -213,8 +213,10 @@ def cleanup_worklist(worklist, dispense_type, asp_mixing):
 
     worklist['dispense_type_temp'] = worklist['dispense_type']
     worklist['dispense_type_temp'].replace(regex=True, inplace=True, to_replace='_', value='')
+    worklist['user_defined_liquid_class'] = worklist['liquid_class']
     worklist['liquid_class'] = 'ivl_tip' + worklist['tip_type'].astype(str) + '_' + \
                                worklist['liquid_class'] + '_' + worklist['dispense_type_temp']
+
     worklist = worklist.drop('dispense_type_temp', axis=1)
     # print('worklist Output\n', worklist.to_string())
     return worklist
@@ -306,14 +308,11 @@ def assign_src(worklist, plate_df, nzfill):
     :param nzfill: number to fill with leading zeros to
     :return: worklist with sources
     """
-    # print("\n=== Starting assign_src ===")
     # first tally up the total volume
     source_df = worklist.groupby('source')['volume_ul'].sum().to_frame().reset_index()
     step_df = worklist.loc[:, ['source', 'step_index', 'step']].drop_duplicates()
     source_df = source_df.merge(step_df).sort_values(['source'])
     source_df = source_df[source_df['volume_ul'] > 0]
-    # print("\nInitial source_df:")
-    # print(source_df)
 
     # reagent plate df
     plate_df['volume_usable'] = plate_df['volume_well'] - plate_df['volume_holdover']
@@ -331,8 +330,8 @@ def assign_src(worklist, plate_df, nzfill):
     # print(source_df)
     
     source_df = source_df.merge(plate_df)
-    print("\nSource_df after merge with plate_df:")
-    print(source_df.to_string())
+    # print("\nSource_df after merge with plate_df:")
+    # print(source_df.to_string())
 
     # assign wells
     # go through each step, plate combo and assign well numbers
@@ -372,8 +371,11 @@ def assign_src(worklist, plate_df, nzfill):
         sort_values('index').drop('index', axis=1)
 
     # special case for imaging
-    worklist.loc[worklist['step'] == 'imaging', 'from_plate'] = worklist.loc[worklist['step'] == 'imaging', 'to_plate']
-    worklist.loc[worklist['step'] == 'imaging', 'from_well'] = worklist.loc[worklist['step'] == 'imaging', 'to_well']
+    # we will check if the liquid class is imaging instead of step name
+    worklist.loc[worklist['user_defined_liquid_class'] == 'imaging', 'from_plate'] = worklist.loc[worklist['user_defined_liquid_class'] == 'imaging', 'to_plate']
+    worklist.loc[worklist['user_defined_liquid_class'] == 'imaging', 'from_well'] = worklist.loc[worklist['user_defined_liquid_class'] == 'imaging', 'to_well']
+    # worklist.loc[worklist['step'] == 'imaging', 'from_plate'] = worklist.loc[worklist['step'] == 'imaging', 'to_plate']
+    # worklist.loc[worklist['step'] == 'imaging', 'from_well'] = worklist.loc[worklist['step'] == 'imaging', 'to_well']
 
     # special case for the reservoir
     for each in worklist['group_number'].unique():
@@ -429,6 +431,7 @@ def make_worklist_one_run(exp_input, delimiter_cell, delimiter_col,  # info abou
     worklist = factorial['worklist']
     worklist_raw = worklist.copy()
 
+
     worklist = reorder_groups(worklist, time_df)
 
     # clean up worklist
@@ -446,10 +449,10 @@ def make_worklist_one_run(exp_input, delimiter_cell, delimiter_col,  # info abou
 
 
     # source assignment
-    #print('PlateDF before assigning source:', plate_df)
     source_out = assign_src(worklist=worklist,
                             plate_df=plate_df,
                             nzfill=nzfill)
+    
 
     #print('PlateDF after assigning source:', plate_df)
     worklist = source_out['worklist']

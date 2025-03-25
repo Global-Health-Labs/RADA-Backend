@@ -116,6 +116,8 @@ async function formatExperimentData(
     createdAt: experiment.createdAt,
     updatedAt: experiment.updatedAt,
     type: "NAAT",
+    mixingStepLiquidType: experiment.mixingStepLiquidType,
+    aqStepLiquidType: experiment.aqStepLiquidType,
   };
 }
 
@@ -207,6 +209,8 @@ router.post("/", authenticateToken, async (req: Request, res: Response) => {
         .values({
           ...experimentData,
           ownerId: userId,
+          mixingStepLiquidType: experimentData.mixingStepLiquidType || "water",
+          aqStepLiquidType: experimentData.aqStepLiquidType || "water",
         })
         .returning();
 
@@ -370,16 +374,19 @@ router.put(
       } else {
         const hasAccess = await hasExperimentAccess(experiment[0], req.user);
         if (!hasAccess) {
-          return res.status(403).json({ message: "Forbidden" });
+          return res.status(403).json({ message: "Access denied" });
         }
       }
 
       const result = await db.transaction(async (tx) => {
         // Update the experiment
-        const [experiment] = await tx
+        const [updatedExperiment] = await tx
           .update(naatExperiments)
           .set({
             ...experimentData,
+            mixingStepLiquidType:
+              experimentData.mixingStepLiquidType || "water",
+            aqStepLiquidType: experimentData.aqStepLiquidType || "water",
             updatedAt: new Date(),
           })
           .where(eq(naatExperiments.id, experimentId))
@@ -396,7 +403,7 @@ router.put(
           if (useAsPreset && existingPreset.length === 0) {
             // Create new preset
             await tx.insert(naatPresets).values({
-              experimentId: experiment.id,
+              experimentId: updatedExperiment.id,
               updatedBy: userId,
             });
           } else if (!useAsPreset && existingPreset.length > 0) {
@@ -407,7 +414,7 @@ router.put(
           }
         }
 
-        return experiment;
+        return updatedExperiment;
       });
 
       res.json(await formatExperimentData(result, req.user?.fullName || ""));
@@ -717,6 +724,9 @@ router.post(
           name: `${originalExperiment[0].name} (Copy)`,
           createdAt: new Date(),
           updatedAt: new Date(),
+          mixingStepLiquidType:
+            originalExperiment[0].mixingStepLiquidType || "water",
+          aqStepLiquidType: originalExperiment[0].aqStepLiquidType || "water",
         })
         .returning();
 
