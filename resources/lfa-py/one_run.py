@@ -213,8 +213,10 @@ def cleanup_worklist(worklist, dispense_type, asp_mixing):
 
     worklist['dispense_type_temp'] = worklist['dispense_type']
     worklist['dispense_type_temp'].replace(regex=True, inplace=True, to_replace='_', value='')
+    worklist['user_defined_liquid_class'] = worklist['liquid_class']
     worklist['liquid_class'] = 'ivl_tip' + worklist['tip_type'].astype(str) + '_' + \
                                worklist['liquid_class'] + '_' + worklist['dispense_type_temp']
+
     worklist = worklist.drop('dispense_type_temp', axis=1)
     # print('worklist Output\n', worklist.to_string())
     return worklist
@@ -368,11 +370,12 @@ def assign_src(worklist, plate_df, nzfill):
         merge(source_df, how='outer'). \
         sort_values('index').drop('index', axis=1)
 
-
     # special case for imaging
-    worklist.loc[worklist['step'] == 'imaging', 'from_plate'] = worklist.loc[worklist['step'] == 'imaging', 'to_plate']
-    worklist.loc[worklist['step'] == 'imaging', 'from_well'] = worklist.loc[worklist['step'] == 'imaging', 'to_well']
-
+    # we will check if the liquid class is imaging instead of step name
+    worklist.loc[worklist['user_defined_liquid_class'] == 'imaging', 'from_plate'] = worklist.loc[worklist['user_defined_liquid_class'] == 'imaging', 'to_plate']
+    worklist.loc[worklist['user_defined_liquid_class'] == 'imaging', 'from_well'] = worklist.loc[worklist['user_defined_liquid_class'] == 'imaging', 'to_well']
+    # worklist.loc[worklist['step'] == 'imaging', 'from_plate'] = worklist.loc[worklist['step'] == 'imaging', 'to_plate']
+    # worklist.loc[worklist['step'] == 'imaging', 'from_well'] = worklist.loc[worklist['step'] == 'imaging', 'to_well']
 
     # special case for the reservoir
     for each in worklist['group_number'].unique():
@@ -428,9 +431,8 @@ def make_worklist_one_run(exp_input, delimiter_cell, delimiter_col,  # info abou
     worklist = factorial['worklist']
     worklist_raw = worklist.copy()
 
-    worklist = reorder_groups(worklist, time_df)
 
-    print(factorial['worklist'])
+    worklist = reorder_groups(worklist, time_df)
 
     # clean up worklist
     worklist = cleanup_worklist(worklist=worklist, dispense_type=dispense_type, asp_mixing=asp_mixing)
@@ -450,6 +452,7 @@ def make_worklist_one_run(exp_input, delimiter_cell, delimiter_col,  # info abou
     source_out = assign_src(worklist=worklist,
                             plate_df=plate_df,
                             nzfill=nzfill)
+    
 
     #print('PlateDF after assigning source:', plate_df)
     worklist = source_out['worklist']
