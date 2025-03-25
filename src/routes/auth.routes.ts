@@ -7,6 +7,7 @@ import { roles, users } from "../db/schema";
 import { authenticateToken } from "../middleware/auth";
 import { sendResetPasswordEmail } from "../services/email.service";
 import { comparePassword, hashPassword } from "../utils/auth";
+import { StringValue } from "ms";
 
 const router = Router();
 
@@ -62,7 +63,7 @@ router.post("/login", async (req: Request, res: Response) => {
           role: role.name,
         },
         config.JWT_SECRET_KEY,
-        { expiresIn: config.JWT_ACCESS_TOKEN_EXPIRES }
+        { expiresIn: config.JWT_ACCESS_TOKEN_EXPIRES as StringValue }
       );
     }
 
