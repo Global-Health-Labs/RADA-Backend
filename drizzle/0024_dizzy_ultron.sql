@@ -1,0 +1,2 @@
+ALTER TABLE "experimental_plan" RENAME COLUMN "aq_step_liquid_type" TO "aq_step_mm_liquid_type";--> statement-breakpoint
+ALTER TABLE "experimental_plan" ADD COLUMN "aq_step_sample_liquid_type" varchar(50) DEFAULT 'water';

@@ -62,8 +62,15 @@ export const naatExperiments = pgTable("experimental_plan", {
   numOfTechnicalReplicates: integer("num_of_technical_replicates"),
   mastermixVolumePerReaction: integer("mastermix_volume_per_reaction"),
   sampleVolumePerReaction: integer("sample_volume_per_reaction"),
-  mixingStepLiquidType: varchar("mixing_step_liquid_type", { length: 50 }).default("water"),
-  aqStepLiquidType: varchar("aq_step_liquid_type", { length: 50 }).default("water"),
+  mixingStepLiquidType: varchar("mixing_step_liquid_type", {
+    length: 50,
+  }).default("water"),
+  aqStepMastermixLiquidType: varchar("aq_step_mm_liquid_type", {
+    length: 50,
+  }).default("water"),
+  aqStepSampleLiquidType: varchar("aq_step_sample_liquid_type", {
+    length: 50,
+  }).default("water"),
   pcrPlateSize: integer("pcr_plate_size"),
   deckLayoutId: uuid("deck_layout_id").references(() => deckLayouts.id),
   ownerId: uuid("owner_id").references(() => users.id),

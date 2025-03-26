@@ -117,7 +117,8 @@ async function formatExperimentData(
     updatedAt: experiment.updatedAt,
     type: "NAAT",
     mixingStepLiquidType: experiment.mixingStepLiquidType,
-    aqStepLiquidType: experiment.aqStepLiquidType,
+    aqStepMastermixLiquidType: experiment.aqStepMastermixLiquidType,
+    aqStepSampleLiquidType: experiment.aqStepSampleLiquidType,
   };
 }
 
@@ -210,7 +211,10 @@ router.post("/", authenticateToken, async (req: Request, res: Response) => {
           ...experimentData,
           ownerId: userId,
           mixingStepLiquidType: experimentData.mixingStepLiquidType || "water",
-          aqStepLiquidType: experimentData.aqStepLiquidType || "water",
+          aqStepMastermixLiquidType:
+            experimentData.aqStepMastermixLiquidType || "water",
+          aqStepSampleLiquidType:
+            experimentData.aqStepSampleLiquidType || "water",
         })
         .returning();
 
@@ -386,7 +390,10 @@ router.put(
             ...experimentData,
             mixingStepLiquidType:
               experimentData.mixingStepLiquidType || "water",
-            aqStepLiquidType: experimentData.aqStepLiquidType || "water",
+            aqStepMastermixLiquidType:
+              experimentData.aqStepMastermixLiquidType || "water",
+            aqStepSampleLiquidType:
+              experimentData.aqStepSampleLiquidType || "water",
             updatedAt: new Date(),
           })
           .where(eq(naatExperiments.id, experimentId))
@@ -726,7 +733,10 @@ router.post(
           updatedAt: new Date(),
           mixingStepLiquidType:
             originalExperiment[0].mixingStepLiquidType || "water",
-          aqStepLiquidType: originalExperiment[0].aqStepLiquidType || "water",
+          aqStepMastermixLiquidType:
+            originalExperiment[0].aqStepMastermixLiquidType || "water",
+          aqStepSampleLiquidType:
+            originalExperiment[0].aqStepSampleLiquidType || "water",
         })
         .returning();
 
