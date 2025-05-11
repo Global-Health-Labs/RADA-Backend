@@ -41,18 +41,22 @@ def main():
     current_input = dict(zip(keys, values))
 
     run_worklist_files = glob.glob(os.path.join(input_dict['output_dir'], '*_worklist.csv'))
-    # print('run_worklist_files', run_worklist_files)
     for each_file in run_worklist_files:
         run_worklist = pd.read_csv(each_file)
-        # print('current_input', current_input)
         full = full_from_run_worklist(run_worklist, **current_input)
-        # print("Output from full_from_run_worklist:", full)
 
         # update liquid class
         full['worklist'] = update_liquid_class(full['worklist'], input_dict['liquid_type_df'])
 
         base_name = os.path.basename(each_file).replace('worklist.csv', '')
-        full['worklist'].to_csv(os.path.join(full_dir, base_name + 'full_worklist.csv'), index=False)
+        
+        # Drop user_defined_liquid_class column before exporting to CSV
+        if 'user_defined_liquid_class' in full['worklist'].columns:
+            worklist_export = full['worklist'].drop(columns=['user_defined_liquid_class'])
+        else:
+            worklist_export = full['worklist']
+            
+        worklist_export.to_csv(os.path.join(full_dir, base_name + 'full_worklist.csv'), index=False)
         full['user_solution'].to_csv(os.path.join(full_dir, base_name + 'full_user_solution.csv'), index=False)
         full['user_labware'].to_csv(os.path.join(full_dir, base_name + 'full_user_labware.csv'), index=False)
         full['user_tip'].to_csv(os.path.join(full_dir, base_name + 'full_user_tip.csv'), index=False)

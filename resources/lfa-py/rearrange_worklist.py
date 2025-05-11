@@ -10,7 +10,6 @@ def reorder_groups(worklist, exp_time):
     :return: new worklist
     """
     # smaller df for timing
-    # print('exp_time\n', exp_time.to_string())
     time_worklist = worklist[['step', 'time', 'step_index', 
                               'step_group_index', 'previous_step_index', 'destination_group', 
                               'group', 'previous_group']].drop_duplicates().reset_index(drop=True)
@@ -151,7 +150,6 @@ def reorder_groups(worklist, exp_time):
         sort_values('group_order').drop('group_order', axis=1)
 
     worklist = reset_group(worklist).sort_values(['group', 'destination'])
-    # print('worklist\n', worklist.to_string())
     return worklist
 
 

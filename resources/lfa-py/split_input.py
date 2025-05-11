@@ -41,27 +41,17 @@ def get_option_df(exp_input, coord0, coord1, nsub0, nsub1, delimiter_cell, delim
     :param delimiter_col: delimiter to separate row and col indices of the coordinate, to use in column name of options
     :return: dataframe of permutations
     """
-    # print('coord0', coord0, 'coord1', coord1)
-    # print('tuple(np.array(coord0.split(delimiter_col)).astype(int))',tuple(np.array(coord0.split(delimiter_col)).astype(int)))
     string0 = exp_input.iloc[tuple(np.array(coord0.split(delimiter_col)).astype(int))]
-    # print('string0', string0)
     option0 = np.array(string0.replace(' ', '').split(delimiter_cell))
-    # print('option0', option0)
     n0 = len(option0)
 
     string1 = exp_input.iloc[tuple(np.array(coord1.split(delimiter_col)).astype(int))]
-    # print('string1', string1)
     option1 = np.array(string1.replace(' ', '').split(delimiter_cell))
-    # print('option1', option1)
     n1 = len(option1)
 
     perm_ind = get_perm_ind(n0, n1, nsub0, nsub1)
-    # print('n0', n0, 'n1', n1, 'nsub0', nsub0, 'nsub1', nsub1, 'perm_ind', perm_ind)
     option_list = [[delimiter_cell.join(option0[each[0]]), delimiter_cell.join(option1[each[1]])] for each in perm_ind]
     option_df = pd.DataFrame(data=option_list, columns=[coord0, coord1])
-    # print('option_list', option_list)
-    # print('option_df', option_df)
-    # print('exp_input', exp_input.to_string())
     return option_df
 
 
@@ -73,7 +63,6 @@ def get_sub_exp_input(exp_input, option_row, delimiter_col):
     :param delimiter_col: delimiter to separate row and col indices of the coordinate, to use in column name of options
     :return:
     """
-    # print('option_row', option_row.index.values)
     out = exp_input.copy()
     for each in option_row.index.values:
         out.iloc[tuple(np.array(each.split(delimiter_col)).astype(int))] = option_row[each]
@@ -93,11 +82,8 @@ def get_sub_exp_input_list(exp_input, coord0, coord1, nsub0, nsub1, delimiter_ce
     :return: list of dataframes for subexperiments
     """
     option_df = get_option_df(exp_input, coord0, coord1, nsub0, nsub1, delimiter_cell, delimiter_col)
-    # print('option_df.shape', option_df.shape[0])
-    # print('option_df', option_df.to_string())
     sub_exp_input_list = [get_sub_exp_input(exp_input, option_df.iloc[i, :], delimiter_col)
                           for i in range(option_df.shape[0])]
-    # print('sub_exp_input_list', sub_exp_input_list)
     return sub_exp_input_list
 
 

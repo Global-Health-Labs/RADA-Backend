@@ -17,7 +17,6 @@ def get_plate_type(plate):
     """
     plate_split = plate.split('_')
     plate_type = '_'.join(plate_split[:-1])
-    # print('plate_type', plate_type, 'plate', plate)
     return plate_type
 
 
@@ -28,12 +27,8 @@ def patch_input(exp_input):
     :return: dataframe with extra columns
     """
     # determine step index and step group index based on timing
-    # print("patch_input: exp_input.shape\n", exp_input.shape)
-    # print('np.arange(exp_input.shape[0])', (np.arange(exp_input.shape[0])+1))
-    # print("patch_input: exp_input::before\n", exp_input)
     exp_input['step_index'] = np.arange(exp_input.shape[0]) + 1
     exp_input['step_group_index'] = exp_input['step_index']
-    # print("exp_input['step_index']", exp_input['step_index'])
     for i in range(exp_input.shape[0] - 1):
         if exp_input.loc[i, 'time'] == 0:
             exp_input.loc[i + 1, 'step_group_index'] = exp_input.loc[i, 'step_group_index']
@@ -41,7 +36,6 @@ def patch_input(exp_input):
     exp_input['previous_step_index'] = exp_input['step_index'] - 1
     no_time_index = np.setdiff1d(np.where(exp_input['time'] <= 0)[0] + 1, [exp_input.shape[0]])
     exp_input.loc[no_time_index, 'previous_step_index'] = 0
-    # print("patch_input: exp_input::after\n", exp_input)
     return exp_input
 
 
@@ -55,9 +49,6 @@ def get_perm_df(exp_input, nrep, delimiter_cell, delimiter_col, reverse_var):
     :param reverse_var: reverse the order of variables to sort
     :return: dataframe of permutations
     """
-    #print('exp_input\n', exp_input.to_string())
-    #print('nrep', nrep, 'delimiter_cell', delimiter_cell, 'delimiter_col', delimiter_col, 'reverse_var', reverse_var)
-
     def count_each_cell(cell_string):
         return len(str(cell_string).replace(' ', '').split(delimiter_cell))
 
@@ -86,7 +77,6 @@ def get_perm_df(exp_input, nrep, delimiter_cell, delimiter_col, reverse_var):
                            columns=perm_col)
     perm_df['destination'] = np.arange(perm_df.shape[0]) + 1
 
-    # print('perm_df\n', perm_df.to_string())
     return perm_df
 
 
@@ -113,7 +103,7 @@ def get_worklist_from_perm(exp_input, perm_df, npergroup, delimiter_col):
             coord = np.array(perm_each_col.split(delimiter_col)).astype(int)
             temp.iloc[tuple(coord)] = perm[perm_each_col]
 
-        worklist = pd.concat([worklist, temp], ignore_index=True, sort=False)
+        worklist = pd.concat([worklist, temp], ignore_index=False, sort=False)
 
     # determine destination group based on the number of strips to do at once
     all_dst = np.sort(worklist['destination'].unique())
@@ -134,12 +124,12 @@ def get_worklist_from_perm(exp_input, perm_df, npergroup, delimiter_col):
     to_append['previous_step_index'] = 0
     to_append['previous_group'] = 0
     to_append = to_append.drop_duplicates().reset_index(drop=True)
-    previous_group_df = pd.concat([previous_group_df, to_append], ignore_index=True, sort=False)
-    worklist = worklist.merge(previous_group_df).reset_index(drop=True)
+    # previous_group_df = previous_group_df.append(to_append, ignore_index=True, sort=False)
+    updated_group_df = pd.concat([previous_group_df, to_append])
+    #print(updated_group_df)
+    worklist = worklist.merge(updated_group_df).reset_index(drop=True)
 
     worklist = worklist.sort_values(['step_group_index', 'destination_group', 'step_index', 'destination'])
-
-    #print('worklist\n', worklist.to_string())
 
     return worklist
 
@@ -154,8 +144,6 @@ def get_worklist_full_factorial(exp_input, nrep, npergroup, delimiter_cell, deli
     :param reverse_var: reverse the order of variables to sort
     :return: worklist
     """
-    #print('exp_input\n', exp_input)
-    #print('nrep', nrep, 'npergroup', npergroup, 'delimiter_cell', delimiter_cell, 'delimiter_col', delimiter_col, 'reverse_var')
     exp_input = patch_input(exp_input)
     perm_df = get_perm_df(exp_input, nrep, delimiter_cell, delimiter_col, reverse_var)
 
@@ -194,8 +182,6 @@ def cleanup_worklist(worklist, dispense_type, asp_mixing):
     :param asp_mixing: mixing during aspiration
     :return: cleaned worklist
     """
-    # print('dispense_type', dispense_type, 'asp_mixing', asp_mixing)
-    # print('worklist Input\n', worklist.to_string())
     worklist = worklist.drop(['step_group_index', 'previous_step_index', 'destination_group'], axis=1)
     worklist = worklist.rename(columns={'group': 'group_number',
                                         'previous_group': 'timer_group_check',
@@ -218,7 +204,6 @@ def cleanup_worklist(worklist, dispense_type, asp_mixing):
                                worklist['liquid_class'] + '_' + worklist['dispense_type_temp']
 
     worklist = worklist.drop('dispense_type_temp', axis=1)
-    # print('worklist Output\n', worklist.to_string())
     return worklist
 
 
@@ -230,15 +215,12 @@ def get_tip_type(volume, types=[0, 50, 300, 1000]):
     :return: tip types
     """
     # convert to numpy arrays just in case
-    #print('volume', volume)
-    #print('types', types)
     volume = np.array(volume)
     types = np.array(types)
     # make the comparison, the find the indices
     compatible = volume[:, np.newaxis] <= types[np.newaxis, :]
     ind = (1 - compatible).sum(axis=1)
     tip_type = types[ind]
-    #print('tip_type', tip_type)
     return tip_type
 
 
@@ -281,7 +263,6 @@ def assign_dst(worklist, assay_plate_prefix, nplate, nperplate, ncol, nzfill, so
     :param sort_by_col: sort by column
     :return: worklist with assigned destinations (strip locations)
     """
-    # print('assay_plate_prefix', assay_plate_prefix, 'nplate', nplate, 'nperplate', nperplate, 'ncol', ncol, 'nzfill', nzfill, 'sort_by_col', sort_by_col)
     assay_area_df = get_assay_area_df(assay_plate_prefix=assay_plate_prefix,
                                       nplate=nplate,
                                       nperplate=nperplate,
@@ -317,21 +298,13 @@ def assign_src(worklist, plate_df, nzfill):
     # reagent plate df
     plate_df['volume_usable'] = plate_df['volume_well'] - plate_df['volume_holdover']
     plate_df = plate_df.sort_values('volume_usable')
-    # print("\nPlate_df after sorting:")
-    # print(plate_df)
 
     # assign plates
     volume_types = np.append([0], plate_df['volume_usable'].values)
-    # print("\nVolume types array:")
-    # print(volume_types)
     
     source_df['volume_usable'] = get_tip_type(source_df['volume_ul'], volume_types)
-    # print("\nSource_df after get_tip_type:")
-    # print(source_df)
     
     source_df = source_df.merge(plate_df)
-    # print("\nSource_df after merge with plate_df:")
-    # print(source_df.to_string())
 
     # assign wells
     # go through each step, plate combo and assign well numbers
@@ -421,7 +394,8 @@ def make_worklist_one_run(exp_input, delimiter_cell, delimiter_col,  # info abou
     :param time_df: dataframe, time it takes to run steps
     :return: dictionary of worklist and source dataframes
     """
-    # print('asp_mixing:', asp_mixing, 'dispense_type:', dispense_type, 'nrep:', nrep, 'npergroup:', npergroup, 'delimiter_cell:', delimiter_cell, 'delimiter_col:', delimiter_col, 'reverse_var:', reverse_var)
+    # protocol definition
+    # full factorial worklist
     factorial = get_worklist_full_factorial(exp_input=exp_input,
                                             nrep=nrep,
                                             npergroup=npergroup,
@@ -453,12 +427,8 @@ def make_worklist_one_run(exp_input, delimiter_cell, delimiter_col,  # info abou
                             plate_df=plate_df,
                             nzfill=nzfill)
     
-
-    #print('PlateDF after assigning source:', plate_df)
     worklist = source_out['worklist']
     source_df = source_out['source_df']
-
-    # print('worklist', worklist.to_string())
 
     groupby_df = worklist.groupby(by=['from_plate', 'from_well'])
     groupby_v = groupby_df['volume_ul'].sum().reset_index()
@@ -469,7 +439,6 @@ def make_worklist_one_run(exp_input, delimiter_cell, delimiter_col,  # info abou
     source_real['plate'] = [get_plate_type(each) for each in source_real['from_plate']]
     source_real = source_real.merge(plate_df, how='left')
     source_real['volume_user_input'] = source_real['volume_ul'] + source_real['volume_holdover']
-    # print("source_real['plate']:\n", source_real['plate'].unique())
 
     if export_intermediate:
         factorial['exp_input'].to_csv(output_prefix + 'exp_input_patched.csv', index=False)
