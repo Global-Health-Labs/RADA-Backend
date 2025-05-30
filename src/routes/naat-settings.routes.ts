@@ -23,19 +23,12 @@ const volumeUnitSchema = z.object({
   unit: z.string().min(1),
 });
 
-// GET /settings/naat/liquid-types
-router.get("/liquid-types", async (req, res) => {
-  const types = await db
-    .select()
-    .from(naatLiquidTypes)
-    .orderBy(naatLiquidTypes.displayName);
-  res.json(types);
-});
-
 // POST /settings/naat/liquid-types
 router.post("/liquid-types", async (req, res) => {
   try {
-    const { value, displayName, needsTipWashing } = liquidTypeSchema.parse(req.body);
+    const { value, displayName, needsTipWashing } = liquidTypeSchema.parse(
+      req.body
+    );
 
     // Check if value already exists
     const existing = await db
@@ -95,7 +88,9 @@ router.post("/liquid-types", async (req, res) => {
 router.put("/liquid-types/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const { value, displayName, needsTipWashing } = liquidTypeSchema.parse(req.body);
+    const { value, displayName, needsTipWashing } = liquidTypeSchema.parse(
+      req.body
+    );
 
     // Check if value already exists for a different ID
     const existing = await db
@@ -166,12 +161,6 @@ router.delete("/liquid-types/:id", async (req, res) => {
       error: error.message,
     });
   }
-});
-
-// GET /settings/naat/volume-units
-router.get("/volume-units", async (req, res) => {
-  const units = await db.select().from(volumeUnits).orderBy(volumeUnits.unit);
-  res.json(units);
 });
 
 // POST /settings/naat/volume-units
@@ -295,8 +284,6 @@ router.delete("/volume-units/:id", async (req, res) => {
 });
 
 // Deck Layout Routes
-router.get("/deck-layouts", getDeckLayouts);
-router.get("/deck-layouts/:id", getDeckLayout);
 router.post("/deck-layouts", createDeckLayout);
 router.put("/deck-layouts/:id", updateDeckLayout);
 

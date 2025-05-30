@@ -105,15 +105,6 @@ router.delete(
   deleteLFAConfig
 );
 
-// GET /settings/lfa/liquid-types
-router.get("/liquid-types", async (req, res) => {
-  const types = await db
-    .select()
-    .from(lfaLiquidTypes)
-    .orderBy(lfaLiquidTypes.displayName);
-  res.json(types);
-});
-
 // POST /settings/lfa/liquid-types
 router.post("/liquid-types", async (req, res) => {
   try {

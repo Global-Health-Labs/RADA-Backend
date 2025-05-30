@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { getLFAConfigs } from "../controllers/lfa-settings.controller";
 import {
   cloneLFAExperiment,
   createLFAExperiment,
@@ -8,45 +9,47 @@ import {
   getExperimentSteps,
   getLFADeckLayouts,
   getLFAPresets,
+  getLiquidTypes,
   updateExperimentSteps,
   updateLFAExperiment,
 } from "../controllers/lfa.controller";
-import { getLFAConfigs } from "../controllers/lfa-settings.controller";
-import { authenticateToken } from "../middleware/auth";
 
 const router = Router();
 
 // Create new LFA experiment
-router.post("/", authenticateToken, createLFAExperiment);
+router.post("/", createLFAExperiment);
 
 // Get deck layouts
-router.get("/deck-layouts", authenticateToken, getLFADeckLayouts);
+router.get("/deck-layouts", getLFADeckLayouts);
+
+// GET /experiments/lfa/liquid-types
+router.get("/liquid-types", getLiquidTypes);
 
 // Get presets
-router.get("/presets", authenticateToken, getLFAPresets);
+router.get("/presets", getLFAPresets);
 
 // Get assay plate configurations
-router.get("/assay-plate-configs", authenticateToken, getLFAConfigs);
+router.get("/assay-plate-configs", getLFAConfigs);
 
 // update experiment
-router.put("/:id", authenticateToken, updateLFAExperiment);
+router.put("/:id", updateLFAExperiment);
 
 // Get experiment with steps
-router.get("/:id", authenticateToken, getExperiment);
+router.get("/:id", getExperiment);
 
 // Update experiment steps
-router.put("/:id/steps", authenticateToken, updateExperimentSteps);
+router.put("/:id/steps", updateExperimentSteps);
 
 // Get experiment steps
-router.get("/:id/steps", authenticateToken, getExperimentSteps);
+router.get("/:id/steps", getExperimentSteps);
 
 // Export experiment worklist
-router.get("/:id/export", authenticateToken, exportExperiment);
+router.get("/:id/export", exportExperiment);
 
 // Get experiment instructions
-router.get("/:id/instructions", authenticateToken, getExperimentInstructions);
+router.get("/:id/instructions", getExperimentInstructions);
 
 // Clone experiment
-router.post("/:id/clone", authenticateToken, cloneLFAExperiment);
+router.post("/:id/clone", cloneLFAExperiment);
 
 export default router;

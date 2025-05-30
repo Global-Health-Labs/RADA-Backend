@@ -10,8 +10,13 @@ import {
   naatExperiments,
   naatPresets,
   users,
+  volumeUnits,
 } from "../db/schema";
 import { authenticateToken } from "../middleware/auth";
+import {
+  getDeckLayout,
+  getDeckLayouts,
+} from "../controllers/deck-layouts.controller";
 
 const router = Router();
 // Helper function to fetch and format mastermixes
@@ -122,83 +127,93 @@ async function formatExperimentData(
   };
 }
 
-router.get(
-  "/presets",
-  authenticateToken,
-  async (req: Request, res: Response) => {
-    try {
-      const presets = await db
-        .select({
-          preset: naatPresets,
-          experiment: naatExperiments,
-        })
-        .from(naatPresets)
-        .leftJoin(
-          naatExperiments,
-          eq(naatPresets.experimentId, naatExperiments.id)
-        );
-
-      res.json(presets.map((preset) => preset.experiment));
-    } catch (error: any) {
-      console.error("Error fetching presets:", error);
-      res
-        .status(500)
-        .json({ message: "Failed to fetch presets", error: error.message });
-    }
-  }
-);
-
-// Get single experiment
-router.get(
-  "/:experimentId",
-  authenticateToken,
-  async (req: Request, res: Response) => {
-    try {
-      const { experimentId } = req.params;
-
-      const experiment = await db
-        .select({
-          experiment: naatExperiments,
-          owner: users,
-          preset: naatPresets,
-        })
-        .from(naatExperiments)
-        .leftJoin(users, eq(naatExperiments.ownerId, users.id))
-        .leftJoin(naatPresets, eq(naatExperiments.id, naatPresets.experimentId))
-        .where(eq(naatExperiments.id, experimentId));
-
-      if (experiment.length === 0) {
-        return res.status(404).json({ message: "Experiment not found" });
-      } else {
-        const hasAccess = await hasExperimentAccess(
-          experiment[0].experiment,
-          req.user
-        );
-        if (!hasAccess) {
-          return res.status(403).json({ message: "Forbidden" });
-        }
-      }
-
-      const formattedExperiment = await formatExperimentData(
-        experiment[0].experiment,
-        experiment[0].owner?.fullname || "Owner not found"
+router.get("/presets", async (req: Request, res: Response) => {
+  try {
+    const presets = await db
+      .select({
+        preset: naatPresets,
+        experiment: naatExperiments,
+      })
+      .from(naatPresets)
+      .leftJoin(
+        naatExperiments,
+        eq(naatPresets.experimentId, naatExperiments.id)
       );
 
-      res.json({
-        ...formattedExperiment,
-        useAsPreset: !!experiment[0].preset?.id,
-      });
-    } catch (error: any) {
-      console.error("Get experiment error:", error);
-      res
-        .status(500)
-        .json({ message: "Failed to fetch experiment", error: error.message });
-    }
+    res.json(presets.map((preset) => preset.experiment));
+  } catch (error: any) {
+    console.error("Error fetching presets:", error);
+    res
+      .status(500)
+      .json({ message: "Failed to fetch presets", error: error.message });
   }
-);
+});
+
+// GET /experiments/naat/liquid-types
+router.get("/liquid-types", async (req, res) => {
+  const types = await db
+    .select()
+    .from(naatLiquidTypes)
+    .orderBy(naatLiquidTypes.displayName);
+  res.json(types);
+});
+
+// GET /experiments/naat/volume-units
+router.get("/volume-units", async (req, res) => {
+  const units = await db.select().from(volumeUnits).orderBy(volumeUnits.unit);
+  res.json(units);
+});
+
+router.get("/deck-layouts", getDeckLayouts);
+router.get("/deck-layouts/:id", getDeckLayout);
+
+// Get single experiment
+router.get("/:experimentId", async (req: Request, res: Response) => {
+  try {
+    const { experimentId } = req.params;
+
+    const experiment = await db
+      .select({
+        experiment: naatExperiments,
+        owner: users,
+        preset: naatPresets,
+      })
+      .from(naatExperiments)
+      .leftJoin(users, eq(naatExperiments.ownerId, users.id))
+      .leftJoin(naatPresets, eq(naatExperiments.id, naatPresets.experimentId))
+      .where(eq(naatExperiments.id, experimentId));
+
+    if (experiment.length === 0) {
+      return res.status(404).json({ message: "Experiment not found" });
+    } else {
+      const hasAccess = await hasExperimentAccess(
+        experiment[0].experiment,
+        req.user
+      );
+      if (!hasAccess) {
+        return res.status(403).json({ message: "Forbidden" });
+      }
+    }
+
+    const formattedExperiment = await formatExperimentData(
+      experiment[0].experiment,
+      experiment[0].owner?.fullname || "Owner not found"
+    );
+
+    res.json({
+      ...formattedExperiment,
+      useAsPreset: !!experiment[0].preset?.id,
+    });
+  } catch (error: any) {
+    console.error("Get experiment error:", error);
+    res
+      .status(500)
+      .json({ message: "Failed to fetch experiment", error: error.message });
+  }
+});
 
 // Create new experiment
-router.post("/", authenticateToken, async (req: Request, res: Response) => {
+router.post("/", async (req: Request, res: Response) => {
   try {
     const { useAsPreset, presetId, ...experimentData } = req.body;
     const userId = req.user?.id;
@@ -294,7 +309,6 @@ router.post("/", authenticateToken, async (req: Request, res: Response) => {
 // Add mastermix to experiment
 router.post(
   "/:experimentId/mastermixes",
-  authenticateToken,
   async (req: Request, res: Response) => {
     try {
       const { experimentId } = req.params;
@@ -357,174 +371,161 @@ router.post(
 );
 
 // Update experiment
-router.put(
-  "/:experimentId",
-  authenticateToken,
-  async (req: Request, res: Response) => {
-    try {
-      const experimentId = req.params.experimentId;
-      const { useAsPreset, ...experimentData } = req.body;
-      const userId = req.user?.id;
+router.put("/:experimentId", async (req: Request, res: Response) => {
+  try {
+    const experimentId = req.params.experimentId;
+    const { useAsPreset, ...experimentData } = req.body;
+    const userId = req.user?.id;
 
-      // First verify the experiment exists and belongs to the user
-      const experiment = await db
-        .select()
-        .from(naatExperiments)
-        .where(and(eq(naatExperiments.id, experimentId)))
-        .limit(1);
+    // First verify the experiment exists and belongs to the user
+    const experiment = await db
+      .select()
+      .from(naatExperiments)
+      .where(and(eq(naatExperiments.id, experimentId)))
+      .limit(1);
 
-      if (!experiment || experiment.length === 0) {
-        return res.status(404).json({ message: "Experiment not found" });
-      } else {
-        const hasAccess = await hasExperimentAccess(experiment[0], req.user);
-        if (!hasAccess) {
-          return res.status(403).json({ message: "Access denied" });
-        }
+    if (!experiment || experiment.length === 0) {
+      return res.status(404).json({ message: "Experiment not found" });
+    } else {
+      const hasAccess = await hasExperimentAccess(experiment[0], req.user);
+      if (!hasAccess) {
+        return res.status(403).json({ message: "Access denied" });
       }
-
-      const result = await db.transaction(async (tx) => {
-        // Update the experiment
-        const [updatedExperiment] = await tx
-          .update(naatExperiments)
-          .set({
-            ...experimentData,
-            mixingStepLiquidType:
-              experimentData.mixingStepLiquidType || "water",
-            aqStepMastermixLiquidType:
-              experimentData.aqStepMastermixLiquidType || "water",
-            aqStepSampleLiquidType:
-              experimentData.aqStepSampleLiquidType || "water",
-            updatedAt: new Date(),
-          })
-          .where(eq(naatExperiments.id, experimentId))
-          .returning();
-
-        // Handle preset status
-        if (req.user?.role === "admin") {
-          const existingPreset = await tx
-            .select()
-            .from(naatPresets)
-            .where(eq(naatPresets.experimentId, experimentId))
-            .limit(1);
-
-          if (useAsPreset && existingPreset.length === 0) {
-            // Create new preset
-            await tx.insert(naatPresets).values({
-              experimentId: updatedExperiment.id,
-              updatedBy: userId,
-            });
-          } else if (!useAsPreset && existingPreset.length > 0) {
-            // Remove existing preset
-            await tx
-              .delete(naatPresets)
-              .where(eq(naatPresets.experimentId, experimentId));
-          }
-        }
-
-        return updatedExperiment;
-      });
-
-      res.json(await formatExperimentData(result, req.user?.fullName || ""));
-    } catch (error) {
-      console.error("Error updating experiment:", error);
-      res.status(500).json({ error: "Failed to update experiment" });
     }
-  }
-);
 
-// Update mastermix
-router.put(
-  "/mastermixes/:mastermixId",
-  authenticateToken,
-  async (req: Request, res: Response) => {
-    try {
-      const { mastermixId } = req.params;
-      const { nameOfMasterMix, recipes } = req.body;
-
-      const allLiquidTypes = await db.select().from(naatLiquidTypes);
-
-      const updatedMastermix = await db
-        .update(masterMixes)
+    const result = await db.transaction(async (tx) => {
+      // Update the experiment
+      const [updatedExperiment] = await tx
+        .update(naatExperiments)
         .set({
-          nameOfMastermix: nameOfMasterMix,
+          ...experimentData,
+          mixingStepLiquidType: experimentData.mixingStepLiquidType || "water",
+          aqStepMastermixLiquidType:
+            experimentData.aqStepMastermixLiquidType || "water",
+          aqStepSampleLiquidType:
+            experimentData.aqStepSampleLiquidType || "water",
           updatedAt: new Date(),
         })
-        .where(eq(masterMixes.id, mastermixId))
+        .where(eq(naatExperiments.id, experimentId))
         .returning();
 
-      if (updatedMastermix.length === 0) {
-        return res.status(404).json({ message: "Mastermix not found" });
-      }
+      // Handle preset status
+      if (req.user?.role === "admin") {
+        const existingPreset = await tx
+          .select()
+          .from(naatPresets)
+          .where(eq(naatPresets.experimentId, experimentId))
+          .limit(1);
 
-      // Update recipes if provided
-      if (recipes && recipes.length > 0) {
-        // Delete existing recipes
-        await db
-          .delete(masterMixRecipes)
-          .where(eq(masterMixRecipes.mastermixId, mastermixId));
-
-        // Add new recipes
-        for (let i = 0; i < recipes.length; i++) {
-          const recipe = recipes[i];
-          const recipeLiquidType = allLiquidTypes.find(
-            (l) => l.value === recipe.liquidType
-          );
-          await db.insert(masterMixRecipes).values({
-            mastermixId,
-            orderIndex: i + 1,
-            finalSource: recipe.finalSource,
-            unit: recipe.unit,
-            finalConcentration: recipe.finalConcentration,
-            tipWashing: recipeLiquidType?.needsTipWashing ? "Yes" : "No",
-            stockConcentration: recipe.stockConcentration,
-            liquidType: recipe.liquidType,
-            dispenseType: recipe.dispenseType,
+        if (useAsPreset && existingPreset.length === 0) {
+          // Create new preset
+          await tx.insert(naatPresets).values({
+            experimentId: updatedExperiment.id,
+            updatedBy: userId,
           });
+        } else if (!useAsPreset && existingPreset.length > 0) {
+          // Remove existing preset
+          await tx
+            .delete(naatPresets)
+            .where(eq(naatPresets.experimentId, experimentId));
         }
       }
 
-      res.json(updatedMastermix[0]);
-    } catch (error: any) {
-      console.error("Update mastermix error:", error);
-      res
-        .status(500)
-        .json({ message: "Failed to update mastermix", error: error.message });
-    }
+      return updatedExperiment;
+    });
+
+    res.json(await formatExperimentData(result, req.user?.fullName || ""));
+  } catch (error) {
+    console.error("Error updating experiment:", error);
+    res.status(500).json({ error: "Failed to update experiment" });
   }
-);
+});
+
+// Update mastermix
+router.put("/mastermixes/:mastermixId", async (req: Request, res: Response) => {
+  try {
+    const { mastermixId } = req.params;
+    const { nameOfMasterMix, recipes } = req.body;
+
+    const allLiquidTypes = await db.select().from(naatLiquidTypes);
+
+    const updatedMastermix = await db
+      .update(masterMixes)
+      .set({
+        nameOfMastermix: nameOfMasterMix,
+        updatedAt: new Date(),
+      })
+      .where(eq(masterMixes.id, mastermixId))
+      .returning();
+
+    if (updatedMastermix.length === 0) {
+      return res.status(404).json({ message: "Mastermix not found" });
+    }
+
+    // Update recipes if provided
+    if (recipes && recipes.length > 0) {
+      // Delete existing recipes
+      await db
+        .delete(masterMixRecipes)
+        .where(eq(masterMixRecipes.mastermixId, mastermixId));
+
+      // Add new recipes
+      for (let i = 0; i < recipes.length; i++) {
+        const recipe = recipes[i];
+        const recipeLiquidType = allLiquidTypes.find(
+          (l) => l.value === recipe.liquidType
+        );
+        await db.insert(masterMixRecipes).values({
+          mastermixId,
+          orderIndex: i + 1,
+          finalSource: recipe.finalSource,
+          unit: recipe.unit,
+          finalConcentration: recipe.finalConcentration,
+          tipWashing: recipeLiquidType?.needsTipWashing ? "Yes" : "No",
+          stockConcentration: recipe.stockConcentration,
+          liquidType: recipe.liquidType,
+          dispenseType: recipe.dispenseType,
+        });
+      }
+    }
+
+    res.json(updatedMastermix[0]);
+  } catch (error: any) {
+    console.error("Update mastermix error:", error);
+    res
+      .status(500)
+      .json({ message: "Failed to update mastermix", error: error.message });
+  }
+});
 
 // Get mastermix for an experiment
-router.get(
-  "/:experimentId/mastermix",
-  authenticateToken,
-  async (req: Request, res: Response) => {
-    try {
-      const { experimentId } = req.params;
+router.get("/:experimentId/mastermix", async (req: Request, res: Response) => {
+  try {
+    const { experimentId } = req.params;
 
-      // First verify the experiment exists and belongs to the user
-      const experiment = await db
-        .select()
-        .from(naatExperiments)
-        .where(
-          and(
-            eq(naatExperiments.id, experimentId),
-            eq(naatExperiments.ownerId, req.user!.id)
-          )
+    // First verify the experiment exists and belongs to the user
+    const experiment = await db
+      .select()
+      .from(naatExperiments)
+      .where(
+        and(
+          eq(naatExperiments.id, experimentId),
+          eq(naatExperiments.ownerId, req.user!.id)
         )
-        .limit(1);
+      )
+      .limit(1);
 
-      if (experiment.length === 0) {
-        return res.status(404).json({ message: "Experiment not found" });
-      }
-
-      const response = await getMastermixesForExperiment(experimentId);
-      return res.json(response);
-    } catch (error) {
-      console.error("Error fetching mastermix:", error);
-      return res.status(500).json({ message: "Internal server error" });
+    if (experiment.length === 0) {
+      return res.status(404).json({ message: "Experiment not found" });
     }
+
+    const response = await getMastermixesForExperiment(experimentId);
+    return res.json(response);
+  } catch (error) {
+    console.error("Error fetching mastermix:", error);
+    return res.status(500).json({ message: "Internal server error" });
   }
-);
+});
 
 // Update mastermixes for an experiment
 router.put("/:id/mastermix", async (req: Request, res: Response) => {
@@ -702,96 +703,92 @@ router.put("/:id/mastermix", async (req: Request, res: Response) => {
 });
 
 // Clone an experiment
-router.post(
-  "/:id/clone",
-  authenticateToken,
-  async (req: Request, res: Response) => {
-    try {
-      const experimentId = req.params.id;
-      const userId = req.user?.id;
+router.post("/:id/clone", async (req: Request, res: Response) => {
+  try {
+    const experimentId = req.params.id;
+    const userId = req.user?.id;
 
-      // Get the original experiment
-      const originalExperiment = await db
-        .select()
-        .from(naatExperiments)
-        .where(eq(naatExperiments.id, experimentId))
-        .limit(1);
+    // Get the original experiment
+    const originalExperiment = await db
+      .select()
+      .from(naatExperiments)
+      .where(eq(naatExperiments.id, experimentId))
+      .limit(1);
 
-      if (!originalExperiment || originalExperiment.length === 0) {
-        return res.status(404).json({ message: "Experiment not found" });
-      }
+    if (!originalExperiment || originalExperiment.length === 0) {
+      return res.status(404).json({ message: "Experiment not found" });
+    }
 
-      // Create new experiment with copied data
-      const [newExperiment] = await db
-        .insert(naatExperiments)
+    // Create new experiment with copied data
+    const [newExperiment] = await db
+      .insert(naatExperiments)
+      .values({
+        ...originalExperiment[0],
+        id: undefined, // Let DB generate new ID
+        ownerId: userId,
+        name: `${originalExperiment[0].name} (Copy)`,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        mixingStepLiquidType:
+          originalExperiment[0].mixingStepLiquidType || "water",
+        aqStepMastermixLiquidType:
+          originalExperiment[0].aqStepMastermixLiquidType || "water",
+        aqStepSampleLiquidType:
+          originalExperiment[0].aqStepSampleLiquidType || "water",
+      })
+      .returning();
+
+    // Get original mastermixes
+    const originalMastermixes = await db
+      .select()
+      .from(masterMixes)
+      .where(eq(masterMixes.experimentalPlanId, experimentId));
+
+    // Clone mastermixes and their recipes
+    for (const mastermix of originalMastermixes) {
+      // Create new mastermix
+      const [newMastermix] = await db
+        .insert(masterMixes)
         .values({
-          ...originalExperiment[0],
+          ...mastermix,
           id: undefined, // Let DB generate new ID
-          ownerId: userId,
-          name: `${originalExperiment[0].name} (Copy)`,
+          experimentalPlanId: newExperiment.id,
           createdAt: new Date(),
           updatedAt: new Date(),
-          mixingStepLiquidType:
-            originalExperiment[0].mixingStepLiquidType || "water",
-          aqStepMastermixLiquidType:
-            originalExperiment[0].aqStepMastermixLiquidType || "water",
-          aqStepSampleLiquidType:
-            originalExperiment[0].aqStepSampleLiquidType || "water",
         })
         .returning();
 
-      // Get original mastermixes
-      const originalMastermixes = await db
+      // Get original recipes for this mastermix
+      const originalRecipes = await db
         .select()
-        .from(masterMixes)
-        .where(eq(masterMixes.experimentalPlanId, experimentId));
+        .from(masterMixRecipes)
+        .where(eq(masterMixRecipes.mastermixId, mastermix.id))
+        .orderBy(masterMixRecipes.orderIndex);
 
-      // Clone mastermixes and their recipes
-      for (const mastermix of originalMastermixes) {
-        // Create new mastermix
-        const [newMastermix] = await db
-          .insert(masterMixes)
-          .values({
-            ...mastermix,
+      // Clone recipes
+      if (originalRecipes.length > 0) {
+        await db.insert(masterMixRecipes).values(
+          originalRecipes.map((recipe) => ({
+            ...recipe,
             id: undefined, // Let DB generate new ID
-            experimentalPlanId: newExperiment.id,
+            mastermixId: newMastermix.id,
             createdAt: new Date(),
             updatedAt: new Date(),
-          })
-          .returning();
-
-        // Get original recipes for this mastermix
-        const originalRecipes = await db
-          .select()
-          .from(masterMixRecipes)
-          .where(eq(masterMixRecipes.mastermixId, mastermix.id))
-          .orderBy(masterMixRecipes.orderIndex);
-
-        // Clone recipes
-        if (originalRecipes.length > 0) {
-          await db.insert(masterMixRecipes).values(
-            originalRecipes.map((recipe) => ({
-              ...recipe,
-              id: undefined, // Let DB generate new ID
-              mastermixId: newMastermix.id,
-              createdAt: new Date(),
-              updatedAt: new Date(),
-            }))
-          );
-        }
+          }))
+        );
       }
-
-      // Return the cloned experiment with its mastermixes
-      const response = await formatExperimentData(
-        newExperiment,
-        req.user!.fullName
-      );
-      res.json(response);
-    } catch (error) {
-      console.error("Error cloning experiment:", error);
-      res.status(500).json({ message: "Failed to clone experiment" });
     }
+
+    // Return the cloned experiment with its mastermixes
+    const response = await formatExperimentData(
+      newExperiment,
+      req.user!.fullName
+    );
+    res.json(response);
+  } catch (error) {
+    console.error("Error cloning experiment:", error);
+    res.status(500).json({ message: "Failed to clone experiment" });
   }
-);
+});
 
 export default router;

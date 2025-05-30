@@ -14,8 +14,8 @@ const router = Router();
 router.use("/auth", authRoutes);
 router.use("/documents", documentsRoutes);
 router.use("/experiments", experimentsRoutes);
-router.use("/experiments/naat", naatRoutes);
-router.use("/experiments/lfa", lfaRoutes);
+router.use("/experiments/naat", authenticateToken, naatRoutes);
+router.use("/experiments/lfa", authenticateToken, lfaRoutes);
 router.use("/users", authenticateToken, requireAdmin, usersRoutes);
 router.use(
   "/settings/naat",

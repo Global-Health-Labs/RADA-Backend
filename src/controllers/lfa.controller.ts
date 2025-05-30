@@ -14,6 +14,7 @@ import {
   lfaSteps,
   lfaPresets,
   users,
+  lfaLiquidTypes,
 } from "../db/schema";
 import { ExportQueue } from "../utils/ExportQueue";
 
@@ -718,5 +719,18 @@ export async function getLFAPresets(req: Request, res: Response) {
     res
       .status(500)
       .json({ message: "Failed to fetch LFA presets", error: error.message });
+  }
+}
+
+export async function getLiquidTypes(req: Request, res: Response) {
+  try {
+    const types = await db
+      .select()
+      .from(lfaLiquidTypes)
+      .orderBy(lfaLiquidTypes.displayName);
+    res.json(types);
+  } catch (error) {
+    console.error("Error fetching LFA liquid types:", error);
+    res.status(500).json({ error: "Failed to fetch liquid types" });
   }
 }
